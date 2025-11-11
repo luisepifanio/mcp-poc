@@ -16,26 +16,26 @@ class BestEffortEncoder(json.JSONEncoder):
     deja una marca de no serializable en el valor.
     """
 
-    def default(self, obj: Any):
+    def default(self, o):
         """
         Método sobreescrito que maneja tipos que el encoder base no sabe manejar.
         """
         # 1. Manejo de tipos nativos complejos (Opcional: Mejora de UX)
-        if isinstance(obj, (datetime.date, datetime.datetime)):
-            return obj.isoformat()
-        if isinstance(obj, Decimal):
-            return str(obj)
+        if isinstance(o, (datetime.date, datetime.datetime)):
+            return o.isoformat()
+        if isinstance(o, Decimal):
+            return str(o)
 
         # 2. Intento de Navegación (Best Effort)
         try:
             # Si el objeto tiene un método .__dict__ (mayoría de instancias)
-            if hasattr(obj, "__dict__"):
+            if hasattr(o, "__dict__"):
                 # Retorna el diccionario de atributos para que el encoder lo navegue.
                 # Esto es la clave de la recursividad eficiente.
-                return obj.__dict__
+                return o.__dict__
 
             # Intento de conversión simple a string (e.g., para clases base sin __dict__)
-            return str(obj)
+            return str(o)
 
         except Exception:
             # Si la inspección (e.g., acceso a __dict__) o la conversión a str falla
@@ -43,7 +43,7 @@ class BestEffortEncoder(json.JSONEncoder):
             pass
 
         # 3. Fallback: Marcado de No Serializable
-        type_name = type(obj).__qualname__
+        type_name = type(o).__qualname__
         return NON_SERIALIZABLE_TEMPLATE.format(type_name=type_name)
 
 

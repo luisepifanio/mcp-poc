@@ -1,16 +1,13 @@
 # Use server from examples/servers/streamable-http-stateless/
 import asyncio
-import json
 import os
 import time
-from pprint import pprint
-from typing import Any
 
 from dotenv import load_dotenv
-from langchain.agents import create_agent
+from langchain.agents import create_agent  # pyright: ignore[reportUnknownVariableType]
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
-from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.client import MultiServerMCPClient  # pyright: ignore[reportMissingTypeStubs]
 from langchain_ollama import ChatOllama
 from pyfiglet import Figlet
 
@@ -23,13 +20,6 @@ load_dotenv(
     if os.getenv("ENV") in ("development", "dev", "local")
     else None
 )
-
-
-def safe_serialize(obj: Any):
-    def default(o: Any):
-        return f"<<non-serializable: {type(o).__qualname__}>>"
-
-    return json.dumps(obj, default=default, sort_keys=True, indent=4)
 
 
 async def main() -> None:
