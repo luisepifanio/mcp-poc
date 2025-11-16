@@ -26,6 +26,8 @@ async def main() -> None:
     llm = ChatOllama(
         model=os.getenv("OLLAMA_MODEL", "qwen3:8b"),
         base_url=os.getenv("OLLAMA_SERVER_URL", "http://localhost:11434"),
+        validate_model_on_init=True,
+        temperature=0,
     )
 
     agent = create_agent(
@@ -45,7 +47,7 @@ async def main() -> None:
             ]
         }
     )
-    # print(best_effort_serialize(result))
+    print(best_effort_serialize(result))
 
     # 'agent.invoke' returns a dict; handle both dict-structured_response and BaseModel
     if isinstance(result, dict) and "structured_response" in result:

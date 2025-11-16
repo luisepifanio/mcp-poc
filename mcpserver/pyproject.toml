@@ -6,10 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiosqlite>=0.21.0",
+    "colorlog>=6.10.1",
     "fastapi-mcp>=0.4.0",
     "fastapi[standard]>=0.121.0",
     "loguru>=0.7.3",
     "pydantic-settings>=2.11.0",
+    "python-json-logger>=4.0.0",
     "scrapy-playwright>=0.0.44",
     "sqlalchemy[asyncio]>=2.0.44",
     "sqlmodel>=0.0.27",

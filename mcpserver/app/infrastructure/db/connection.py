@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlmodel import SQLModel  # , create_engine
 
-from app.settings import getAppSettings
+from app.core.settings import getAppSettings
 
 settings = getAppSettings()
 connect_args = {"check_same_thread": False}

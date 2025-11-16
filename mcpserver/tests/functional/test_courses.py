@@ -1,14 +1,18 @@
+import logging
+
 import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
+logger = logging.getLogger(__name__)
 
-@pytest.mark.ignore
-def test_validate_injection(value_inject: str):
+
+@pytest.mark.asyncio
+async def test_validate_injection(value_inject: str):
+    logger.warning("Testing dependency injection...")
     assert value_inject == "injected_value"
 
 
-@pytest.mark.ignore
 @pytest.mark.asyncio
 async def test_sync_ping(http_client: TestClient):
     response = http_client.get("/ping")

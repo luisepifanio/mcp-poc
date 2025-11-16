@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient as FastApiTestClient
 from httpx import ASGITransport, AsyncClient
 from sqlmodel import SQLModel
 
-from app.settings import getAppSettings
+from app.core.logconfig import setup_logging
+from app.core.settings import getAppSettings
 
 # Get a logger for this module
 logger = logging.getLogger(__name__)
@@ -21,12 +22,11 @@ async def setup_test_env():
     # Configura el entorno de prueba
     os.environ["ENV"] = "test"
     load_dotenv(dotenv_path="test.env")
-
-    # load environment variables from test.env file
+    setup_logging()
 
     # Prompt environment values..
     for key, value in os.environ.items():
-        logger.debug(f"ENV {key}={value}")
+        logger.info(f"ENV {key}={value}")
     settings = getAppSettings()
 
     # Importamos inline para cambiar las variables de entorno primero

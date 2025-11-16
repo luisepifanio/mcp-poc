@@ -1,3 +1,4 @@
+import logging
 import random
 from contextlib import asynccontextmanager
 
@@ -5,7 +6,11 @@ from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
 from pydantic import BaseModel
 
+from app.core.logconfig import setup_logging
+
 from .routes import router
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -13,6 +18,7 @@ async def lifespan(app: FastAPI):
     # Load the ML model
     from app.infrastructure.db.connection import setup_database_models
 
+    setup_logging()
     await setup_database_models()
 
     yield
@@ -30,6 +36,7 @@ class Hello(BaseModel):
 # health check endpoint
 @app.get("/ping")
 async def ping() -> str:
+    logger.info("Ping received")
     return "pong"
 
 

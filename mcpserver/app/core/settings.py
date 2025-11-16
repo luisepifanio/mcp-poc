@@ -14,12 +14,14 @@ def resolve_env_file():
 
 
 class AppSettings(BaseSettings):
-    ENV: str
+    env: str
     database_url: str
+    log_level: str
 
     model_config = SettingsConfigDict(
         env_file=resolve_env_file(),
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
 
