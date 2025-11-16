@@ -32,7 +32,7 @@ class ScrapyCourseRepository(RetrieveCourseRepository):
         process = CrawlerProcess(settings)
         # Pass the spider class (or spider name) and init args to process.crawl()
         # CrawlerProcess.crawl expects a Spider class, name or Crawler, not an instance.
-        process.crawl(CourseSpider, course_ids=course_ids)
+        process.crawl(CourseSpider, coursedef=",".join(course_ids))
         process.start()
         # Aquí debes manejar el resultado del spider (puedes usar signals o un pipeline)
         # Por simplicidad, asumimos que el spider devuelve un item.

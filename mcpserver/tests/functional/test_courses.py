@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
 
 @pytest.mark.ignore
@@ -9,8 +10,15 @@ def test_validate_injection(value_inject: str):
 
 @pytest.mark.ignore
 @pytest.mark.asyncio
-async def test_read_root(http_client: TestClient):
+async def test_sync_ping(http_client: TestClient):
     response = http_client.get("/ping")
+    assert response.status_code == 200
+    assert response.json() == "pong"
+
+
+@pytest.mark.asyncio
+async def test_async_ping(client: AsyncClient):
+    response = await client.get("/ping")
     assert response.status_code == 200
     assert response.json() == "pong"
 

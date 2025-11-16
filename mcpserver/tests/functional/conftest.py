@@ -1,10 +1,12 @@
 import logging
 import os
+from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient as FastApiTestClient
+from httpx import ASGITransport, AsyncClient
 from sqlmodel import SQLModel
 
 from app.settings import getAppSettings
@@ -50,10 +52,25 @@ def value_inject() -> str:
 
 
 @pytest.fixture(autouse=True, scope="function")
-def http_client() -> TestClient:
+def http_client() -> FastApiTestClient:
     from app.infrastructure.api.main import app
 
-    return TestClient(app)
+    return FastApiTestClient(app)
+
+
+@pytest.fixture
+async def client() -> AsyncGenerator[AsyncClient, None]:
+    # host, port = "127.0.0.1", "9000"
+    from app.infrastructure.api.main import app
+
+    async with AsyncClient(
+        transport=ASGITransport(
+            app=app,
+            # client=(host, port)
+        ),
+        base_url="http://test",
+    ) as client:
+        yield client
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -64,20 +81,21 @@ def fix_session():
     # logger.error("ERROR")
     # logger.critical("CRITICAL")
 
-    logger.debug("Session setup")
+    # logger.debug("Session setup")
     yield
-    logger.debug("Session teardown")
+    # logger.debug("Session teardown")
 
 
+## Example fixtures
 @pytest.fixture(autouse=True, scope="module")
 def fix_module():
-    logger.debug("Module setup")
+    # logger.debug("Module setup")
     yield
-    logger.debug("Module teardown")
+    # logger.debug("Module teardown")
 
 
 @pytest.fixture(autouse=True, scope="function")
 def fix_function():
-    logger.debug("Function setup")
+    # logger.debug("Function setup")
     yield
-    logger.debug(" Function teardown")
+    # logger.debug(" Function teardown")

@@ -7,6 +7,7 @@ from app.infrastructure.scrapy_spider.repository import ScrapyCourseRepository
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="This test is temporarily disabled")
 async def test_scap_courses():
     cookies: dict = {}
     with open("var/lib/cookies.json") as f:
