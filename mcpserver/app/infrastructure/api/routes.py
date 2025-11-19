@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.usecases import GetCourseUseCase, GetCourseUseCaseInput
+from app.core.usecases.course_usecase import GetAsyncCourseUseCase as GetCourseUseCase
+from app.core.usecases.course_usecase import GetCourseUseCaseInput
 from app.infrastructure.db.models import Course as CourseModel
 
 from ..db.connection import get_session
