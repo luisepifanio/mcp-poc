@@ -1,8 +1,7 @@
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-from app.infrastructure.db.models import Course
-
+from ..entities import Course
 from ..unit_of_work import UnitOfWork
 from ..usecase import AsyncUseCase
 

@@ -4,13 +4,13 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from app.core.entities import Course
 from app.core.repositories import CourseRepository
-from app.infrastructure.db.models import Course
 
 
-class AsyncSQLAlchwemyCourseRepository(CourseRepository):
+class AsyncSQLAlchemyCourseRepository(CourseRepository):
     def __init__(self, session: AsyncSession):
-        self.session = session
+        self.session: AsyncSession = session
 
     async def get_courses(self, course_ids: list[str]) -> list[Course]:
         # uuids: list[UUID] = [UUID(uid) for uid in course_ids]

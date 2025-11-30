@@ -4,16 +4,15 @@ import logging.config
 import os
 from typing import Any
 
-from app.core.settings import getAppSettings
+# Important  logging config should not depend on app settings to avoid initialization problema
+# from app.core.settings import getAppSettings # 🔴 Dont do it, please
 
-# Constantes de Entorno
-settings = getAppSettings()
 ENV = (
     "production"
-    if settings.env is None or settings.env in ["", "production", "prd"]
-    else settings.env
+    if os.getenv("ENV", "").lower() in ["", "production", "prod"]
+    else "development"
 ).lower()
-LOG_LEVEL = settings.log_level.upper()
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 # --- Definiciones de Formato y Estructura ---
 
@@ -41,12 +40,12 @@ DEV_FORMATTER = {
 }
 
 # B. Formato de Producción (JSON)
-# Utiliza pythonjsonlogger.jsonlogger.JsonFormatter (DEFAULT)
+# Utiliza pythonjsonlogger.json.JsonFormatter (DEFAULT)
 PROD_FORMATTER_SPEC = (
     "%(asctime)s %(levelname)s %(name)s %(module)s %(funcName)s %(lineno)d %(message)s"
 )
 PROD_FORMATTER = {
-    "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+    "()": "pythonjsonlogger.json.JsonFormatter",
     "format": PROD_FORMATTER_SPEC,
     "datefmt": DATE_FORMAT,
 }

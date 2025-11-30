@@ -28,6 +28,10 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
+async def get_session_local() -> async_sessionmaker[AsyncSession]:
+    return AsyncSessionLocal
+
+
 async def setup_database_models():
     async with async_engine.begin() as conn:
         # await conn.run_sync(SQLModel.metadata.drop_all)

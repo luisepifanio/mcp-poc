@@ -494,6 +494,21 @@ wheels = [
 ]
 
 [[package]]
+name = "fastcrud"
+version = "0.19.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "pydantic" },
+    { name = "sqlalchemy" },
+    { name = "sqlalchemy-utils" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b2/ae/1fc88455e8e399aff19e591423a948cfcdb712a5974fb8d0cedb31412dae/fastcrud-0.19.2.tar.gz", hash = "sha256:d048177cfd6fc1209a36ee71d9790bc7fc16a2c5d856ff783273699533b43bb3", size = 70870, upload-time = "2025-11-15T19:49:44.711Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/6e/f038ca92fe680ad31cee176c61a5536ddbf31f1bbf3923975fd221917abc/fastcrud-0.19.2-py3-none-any.whl", hash = "sha256:1562a905f92196e485d2df2f6ea34f0408702bf41c6cad3a89a1fedf08a4f4d9", size = 98032, upload-time = "2025-11-15T19:49:42.887Z" },
+]
+
+[[package]]
 name = "filelock"
 version = "3.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -929,9 +944,11 @@ dependencies = [
     { name = "colorlog" },
     { name = "fastapi", extra = ["standard"] },
     { name = "fastapi-mcp" },
+    { name = "fastcrud" },
     { name = "loguru" },
     { name = "pydantic-settings" },
     { name = "python-json-logger" },
+    { name = "result" },
     { name = "scrapy-playwright" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "sqlmodel" },
@@ -953,9 +970,11 @@ requires-dist = [
     { name = "colorlog", specifier = ">=6.10.1" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.121.0" },
     { name = "fastapi-mcp", specifier = ">=0.4.0" },
+    { name = "fastcrud", specifier = ">=0.19.2" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "pydantic-settings", specifier = ">=2.11.0" },
     { name = "python-json-logger", specifier = ">=4.0.0" },
+    { name = "result", git = "https://github.com/montasaurus/result" },
     { name = "scrapy-playwright", specifier = ">=0.0.44" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.44" },
     { name = "sqlmodel", specifier = ">=0.0.27" },
@@ -1522,6 +1541,11 @@ wheels = [
 ]
 
 [[package]]
+name = "result"
+version = "0.19.0"
+source = { git = "https://github.com/montasaurus/result#59cd2fb7b57e4851a7054917fbd03c4c8f68a62f" }
+
+[[package]]
 name = "rich"
 version = "14.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1852,6 +1876,18 @@ wheels = [
 [package.optional-dependencies]
 asyncio = [
     { name = "greenlet" },
+]
+
+[[package]]
+name = "sqlalchemy-utils"
+version = "0.41.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sqlalchemy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4d/bf/abfd5474cdd89ddd36dbbde9c6efba16bfa7f5448913eba946fed14729da/SQLAlchemy-Utils-0.41.2.tar.gz", hash = "sha256:bc599c8c3b3319e53ce6c5c3c471120bd325d0071fb6f38a10e924e3d07b9990", size = 138017, upload-time = "2024-03-24T15:17:28.196Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d5/f0/dc4757b83ac1ab853cf222df8535ed73973e0c203d983982ba7b8bc60508/SQLAlchemy_Utils-0.41.2-py3-none-any.whl", hash = "sha256:85cf3842da2bf060760f955f8467b87983fb2e30f1764fd0e24a48307dc8ec6e", size = 93083, upload-time = "2024-03-24T15:17:24.533Z" },
 ]
 
 [[package]]

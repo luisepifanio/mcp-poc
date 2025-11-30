@@ -27,8 +27,8 @@ async def test_async_ping(client: AsyncClient):
     assert response.json() == "pong"
 
 
-@pytest.mark.ignore
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="Endpoint not implemented yet")
 async def test_get_nonexistent_course(http_client: TestClient):
     response = http_client.get("/courses?courses=67902&courses=65192&force_scrap=false")
     assert response.status_code == 200

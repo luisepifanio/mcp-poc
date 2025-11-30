@@ -7,6 +7,7 @@ import pytest_asyncio
 from dotenv import load_dotenv
 from fastapi.testclient import TestClient as FastApiTestClient
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel
 
 from app.core.logconfig import setup_logging
@@ -23,6 +24,7 @@ async def setup_test_env():
     os.environ["ENV"] = "test"
     load_dotenv(dotenv_path="test.env")
     setup_logging()
+    logger.info("🟢 Test environment ready")
 
     # Prompt environment values..
     for key, value in os.environ.items():
@@ -71,6 +73,25 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         base_url="http://test",
     ) as client:
         yield client
+
+
+@pytest_asyncio.fixture(scope="session")
+async def dbsession() -> AsyncGenerator[AsyncSession, None]:
+    """Yield an AsyncSession instance from the async generator returned by get_session().
+
+    `get_session()` returns an async generator / context manager. Use `async with`
+    to enter it and yield the actual `AsyncSession` instance so tests can `await`
+    queries directly on the session.
+    """
+    # Use AsyncSessionLocal directly because `get_session()` returns an async
+    # generator, not an async context manager. Using AsyncSessionLocal() here
+    # lets us `async with` the session and yield the actual AsyncSession.
+    from app.infrastructure.db.connection import get_session_local
+
+    AsyncSessionLocal = await get_session_local()
+
+    async with AsyncSessionLocal() as session:
+        yield session
 
 
 @pytest.fixture(autouse=True, scope="session")

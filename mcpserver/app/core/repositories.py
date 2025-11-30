@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from app.infrastructure.db.models import Course
+from .entities import Course
 
 
 class RetrieveCourseRepository(ABC):
