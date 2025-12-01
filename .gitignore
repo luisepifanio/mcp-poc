@@ -137,7 +137,7 @@ celerybeat.pid
 # =============================================
 # 2. ARCHIVOS LOCALES Y DE ENTORNO
 # =============================================
-local.env
+*.env
 .env*
 .env.test.local
 .env.production.local
