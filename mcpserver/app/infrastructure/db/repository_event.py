@@ -162,3 +162,30 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             return Err(
                 ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
             )
+
+    async def getByExternalUUID(self, external_uuid: UUID) -> Result[Event, ErrorDetail]:
+        try:
+            result = await self._crud.get(
+                self.session,
+                schema_to_select=Event,
+                return_as_model=True,
+                one_or_none=True,
+                # return_total_count=True,
+                external_uuid=external_uuid,
+                deleted_at__is=None,  ## exclude soft-deleted
+                limit=None,
+            )
+
+            if result is None:
+                return Err(
+                    ErrorDetail(
+                        error=ErrorCatalog.NOT_FOUND.value,
+                        detail=f"Event with external_uuid {external_uuid} not found.",
+                    )
+                )
+
+            return Ok(result)
+        except Exception as exc:
+            return Err(
+                ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+            )

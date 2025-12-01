@@ -6,8 +6,8 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.entities import Course as CourseModel
-from app.core.usecases.course_usecase import GetAsyncCourseUseCase as GetCourseUseCase
-from app.core.usecases.course_usecase import GetCourseUseCaseInput
+from app.core.usecases.course_usecases import GetAsyncCourseUseCase as GetCourseUseCase
+from app.core.usecases.course_usecases import GetCourseUseCaseInput
 
 from ..db.connection import get_session
 from ..db.unit_of_work import AsyncSQLAlchwemyUnitOfWork

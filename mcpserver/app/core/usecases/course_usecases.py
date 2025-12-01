@@ -20,7 +20,7 @@ class GetAsyncCourseUseCase(AsyncUseCase[GetCourseUseCaseInput, list[Course]]):
         async with self.uow:
             if input_port.force_scrap:
                 pass  # TODO: implement force scrap logic
-            return await self.uow.course.get_courses(input_port.courses)
+            return await self.uow.courses.get_courses(input_port.courses)
 
 
 class CreateCourseUseCase:
@@ -29,4 +29,4 @@ class CreateCourseUseCase:
 
     async def execute(self, course: Course) -> None:
         async with self.uow:
-            await self.uow.course.save_course(course)
+            await self.uow.courses.save_course(course)

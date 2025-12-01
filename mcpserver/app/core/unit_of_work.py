@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 
 from .repositories import CourseRepository
+from .respository_event import EventRepository
 
 
 class UnitOfWork(ABC):
-    course: CourseRepository
+    courses: CourseRepository
+    events: EventRepository
 
     @abstractmethod
     async def __aenter__(self) -> "UnitOfWork":

@@ -49,6 +49,19 @@ class EventRepository(ABC):
         return Ok(list_of_events[0])
 
     @abstractmethod
+    async def getByExternalUUID(self, external_uuid: UUID) -> Result[Event, ErrorDetail]:
+        """Retrieves an event by its external UUID.
+
+        Args:
+            external_uuid (UUID): The external unique identifier of the event.
+
+        Returns:
+            Result[Event, ErrorDetail]: The result of the get operation.
+            An event instance if found, or an ErrorDetail if not found or an error occurs.
+        """
+        pass
+
+    @abstractmethod
     async def getMany(self, ids: list[UUID]) -> Result[list[Event], ErrorDetail]:
         """Retrieves multiple events by their IDs.
 

@@ -3,7 +3,6 @@ import logging
 # Get a logger for this module
 from collections.abc import AsyncGenerator
 from datetime import datetime
-from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
