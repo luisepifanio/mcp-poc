@@ -39,12 +39,19 @@ class EventTransition(UUIDBase, table=True):
     __tablename__: str = "event_transitions"  #  type: ignore
     from_state: EventState | None = Field(
         default=None,
-        sa_column=Column(SQLEnum(EventState)),
+        # Usamos sa_column_kwargs para pasar el tipo SQLEnum
+        sa_column_kwargs={
+            "sa_type": SQLEnum(EventState),
+            # SQLModel infiere 'nullable' de la pista de tipo (None |)
+        },
     )
     to_state: EventState = Field(
-        sa_column=Column(SQLEnum(EventState)),
+        # Usamos sa_column_kwargs para pasar el tipo SQLEnum
+        sa_column_kwargs={
+            "sa_type": SQLEnum(EventState),
+            # SQLModel infiere 'nullable=False' de la pista de tipo
+        },
     )
-    transition_date: datetime = Field(default=datetime.now)
     event_id: UUID = Field(foreign_key="events.id")
     event: "Event" = Relationship(back_populates="transitions")
 

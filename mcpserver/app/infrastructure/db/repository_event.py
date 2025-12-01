@@ -6,7 +6,6 @@ from fastcrud import FastCRUD
 from fastcrud.types import UpsertMultiResponseDict, UpsertMultiResponseModel
 from result import Err, Ok, Result
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import and_, col, select
 
 from app.core.entities import Event
 from app.core.respository_event import EventRepository
@@ -15,7 +14,7 @@ from app.errors import ErrorCatalog, ErrorDetail
 logger = logging.getLogger(__name__)
 
 
-class DeleteTypedDict(TypedDict, total=False):  # All keys are optional by default
+class DeleteTypedDict(TypedDict):  # All keys are optional by default
     deleted: list
     not_found: list
     total_deleted: int
@@ -66,7 +65,12 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
     async def delete_multi(
         self, events: list[Event]
     ) -> Result[DeleteTypedDict, ErrorDetail]:
-        result: DeleteTypedDict = {"deleted": [], "not_found": []}
+        result: DeleteTypedDict = {
+            "deleted": [],
+            "not_found": [],
+            "total_deleted": 0,
+            "total_not_found": 0,
+        }
 
         for event in events:
             delete_result = await self.delete(event)
@@ -105,15 +109,15 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
             existing_event = _dbEvent.unwrap()
 
-            if not hard:
-                await self._crud.delete(
+            if hard:
+                await self._crud.db_delete(
                     db=self.session,
                     id=existing_event.id,
                     allow_multiple=False,
                     commit=False,
                 )
             else:
-                await self._crud.db_delete(
+                await self._crud.delete(
                     db=self.session,
                     id=existing_event.id,
                     allow_multiple=False,
@@ -136,16 +140,24 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                 self.session,
                 schema_to_select=Event,
                 return_as_model=True,
+                # return_total_count=True,
                 id__in=_ids,
+                deleted_at__is=None,  ## exclude soft-deleted
                 limit=None,
             )
 
-            query = select(Event).where(
-                and_(col(Event.id).in_(_ids), col(Event.deleted_at).is_(None))
-            )
-            result = await self.session.execute(query)
-            events = list(result.scalars().all())
-            return Ok(events)
+            list_of_events: list[Event] = []
+            if result and "data" in result:
+                fetched_events = cast(list[Event], result["data"])
+                logger.debug(f"Fetched {len(fetched_events)} events: {fetched_events}")
+                list_of_events += fetched_events
+
+            # query = select(Event).where(
+            #     and_(col(Event.id).in_(_ids), col(Event.deleted_at).is_(None))
+            # )
+            # result = await self.session.execute(query)
+            # events = list(result.scalars().all())
+            return Ok(list_of_events)
         except Exception as exc:
             return Err(
                 ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
