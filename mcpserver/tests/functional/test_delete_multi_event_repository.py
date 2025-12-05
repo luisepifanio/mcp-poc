@@ -23,9 +23,9 @@ logger = logging.getLogger(__name__)
 async def events_in_db(dbsession: AsyncSession) -> AsyncGenerator[list[Event], None]:
     events: list[Event] = [
         Event(name="event_name_1", external_uuid=None, state=EventState.PENDING),
-        Event(name="event_name_1", external_uuid=uuid4(), state=EventState.PROCESSING),
+        Event(name="event_name_2", external_uuid=uuid4(), state=EventState.PROCESSING),
         Event(
-            name="event_name_1",
+            name="event_name_3",
             external_uuid=uuid4(),
             state=EventState.COMPLETED,
             deleted_at=datetime.now(),

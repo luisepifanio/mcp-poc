@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Iterable
 from typing import TypedDict, cast
 from uuid import UUID
 
@@ -7,7 +8,7 @@ from fastcrud.types import UpsertMultiResponseDict, UpsertMultiResponseModel
 from result import Err, Ok, Result
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.entities import Event
+from app.core.entities import Event, EventTransition
 from app.core.respository_event import EventRepository
 from app.errors import ErrorCatalog, ErrorDetail
 
@@ -29,35 +30,50 @@ class GetMultiTypedDict(TypedDict, total=False):
 class AsyncSQLAlchemyEventRepository(EventRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
-        self._crud = FastCRUD(Event)
+        self.event_crud = FastCRUD(Event)
+        self.transition_crud = FastCRUD(EventTransition)
 
     async def saveMany(self, events: list[Event]) -> Result[list[Event], ErrorDetail]:
         """Insert or update multiple Events using FastCRUD upsert (fallback to manual save)."""
 
         try:
-            result: (
-                UpsertMultiResponseDict | UpsertMultiResponseModel[Event] | None
-            ) = await self._crud.upsert_multi(
-                self.session,
-                events,
-                commit=False,
-                schema_to_select=Event,
-                return_as_model=True,
-            )
-
-            logger.info(f"🟡 Upsert multi result: {result}")
-
+            # Persist 1st level events
             list_of_events: list[Event] = []
-            if result and "data" in result:
-                created_events = cast(list[Event], result["data"])
-                logger.debug(f"Created {len(created_events)} events: {created_events}")
-                list_of_events += created_events
 
+            for event in events:
+                # logger.info(f"🔴 pre poronga {type(event)}")
+                result: (
+                    UpsertMultiResponseDict | UpsertMultiResponseModel[Event] | None
+                ) = await self.event_crud.upsert_multi(
+                    self.session,
+                    [event],
+                    schema_to_select=Event,
+                    return_as_model=True,
+                    commit=False,
+                )
+                result = cast(UpsertMultiResponseModel[Event], result)
+                created = (
+                    result["data"][0]
+                    if result and "data" in result and len(result["data"]) == 1
+                    else None
+                )
+
+                logger.info(f"🔴 created event: {type(created)}")
+
+                if isinstance(created, Event):
+                    for transition in event.transitions:
+                        transition.event_id = created.id
+                        self.session.add(transition)
+                    created.transitions = event.transitions or []
+
+                    list_of_events.append(created)
+            logger.info(f"🟢 Love is good {list_of_events}")
             return Ok(list_of_events)
         except Exception as exc:  # pragma: no cover - bubble up as Err
+            logger.error(f"Error in saveMany: {exc}", exc_info=True)
             return Err(
                 ErrorDetail(
-                    error=ErrorCatalog.GENERIC_FAIL.value,
+                    error=ErrorCatalog.RUNTIME_FAILED.value,
                     detail=str(exc),
                 )
             )
@@ -110,14 +126,14 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             existing_event = _dbEvent.unwrap()
 
             if hard:
-                await self._crud.db_delete(
+                await self.event_crud.db_delete(
                     db=self.session,
                     id=existing_event.id,
                     allow_multiple=False,
                     commit=False,
                 )
             else:
-                await self._crud.delete(
+                await self.event_crud.delete(
                     db=self.session,
                     id=existing_event.id,
                     allow_multiple=False,
@@ -136,7 +152,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         # WARN: this is an early optimization to remove duplicates
         _ids = list(dict.fromkeys(ids))
         try:
-            result = await self._crud.get_multi(
+            result = await self.event_crud.get_multi(
                 self.session,
                 schema_to_select=Event,
                 return_as_model=True,
@@ -147,7 +163,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             )
 
             list_of_events: list[Event] = []
-            if result and "data" in result:
+            if result and "data" in result and isinstance(result["data"], Iterable):
                 fetched_events = cast(list[Event], result["data"])
                 logger.debug(f"Fetched {len(fetched_events)} events: {fetched_events}")
                 list_of_events += fetched_events
@@ -165,7 +181,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
     async def getByExternalUUID(self, external_uuid: UUID) -> Result[Event, ErrorDetail]:
         try:
-            result = await self._crud.get(
+            result = await self.event_crud.get(
                 self.session,
                 schema_to_select=Event,
                 return_as_model=True,

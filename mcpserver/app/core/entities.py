@@ -1,6 +1,6 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import MutableMapping, Sequence
 from enum import Enum as PyEnum
-from typing import Any, NotRequired, TypedDict, Union
+from typing import Any, NotRequired, TypedDict
 from uuid import UUID
 
 from sqlalchemy import JSON
@@ -15,7 +15,7 @@ type JSONScalar = str | int | float | bool | None
 # alias nombrado y recursivo
 type JSONValue = JSONScalar | JSONDict | JSONList
 
-type JSONDict = Mapping[str, JSONValue]
+type JSONDict = MutableMapping[str, JSONValue]
 type JSONList = Sequence[JSONValue]
 
 
@@ -44,10 +44,9 @@ class Course(UUIDBase, AuditableBase, table=True):
     evaluations: list[Evaluation] = Relationship(back_populates="course")
 
 
-class EventTransition(UUIDBase, table=True):
+class EventTransition(UUIDBase, AuditableBase, table=True):
     __tablename__: str = "event_transitions"  #  type: ignore
-    from_state: EventState | None = Field(
-        default=None,
+    from_state: EventState = Field(
         # Usamos sa_column_kwargs para pasar el tipo SQLEnum
         sa_column_kwargs={
             "sa_type": SQLEnum(EventState),
@@ -84,7 +83,8 @@ class Event(UUIDBase, AuditableBase, table=True):
         sa_column=Column(Enum(EventState)), default=EventState.CREATED
     )
     transitions: list[EventTransition] = Relationship(
-        back_populates="event", cascade_delete=True
+        back_populates="event",
+        cascade_delete=True,
     )
     # Declare the JSON column
     result: EventResultStructure | None = Field(

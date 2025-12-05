@@ -77,15 +77,6 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
 @pytest_asyncio.fixture(scope="session")
 async def dbsession() -> AsyncGenerator[AsyncSession, None]:
-    """Yield an AsyncSession instance from the async generator returned by get_session().
-
-    `get_session()` returns an async generator / context manager. Use `async with`
-    to enter it and yield the actual `AsyncSession` instance so tests can `await`
-    queries directly on the session.
-    """
-    # Use AsyncSessionLocal directly because `get_session()` returns an async
-    # generator, not an async context manager. Using AsyncSessionLocal() here
-    # lets us `async with` the session and yield the actual AsyncSession.
     from app.infrastructure.db.connection import get_session_local
 
     AsyncSessionLocal = await get_session_local()

@@ -40,7 +40,7 @@ class IntIdBase(Base, table=False):
 
 
 class UUIDBase(Base, table=False):
-    id: UUID | None = Field(default_factory=uuid4, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
 
 
 class AuditableBase(Base, table=False):
