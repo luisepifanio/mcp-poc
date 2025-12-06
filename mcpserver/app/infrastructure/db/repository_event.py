@@ -40,33 +40,73 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             # Persist 1st level events
             list_of_events: list[Event] = []
 
+            from sqlalchemy.exc import IntegrityError
+
             for event in events:
-                # logger.info(f"🔴 pre poronga {type(event)}")
-                result: (
-                    UpsertMultiResponseDict | UpsertMultiResponseModel[Event] | None
-                ) = await self.event_crud.upsert_multi(
-                    self.session,
-                    [event],
-                    schema_to_select=Event,
-                    return_as_model=True,
-                    commit=False,
-                )
-                result = cast(UpsertMultiResponseModel[Event], result)
-                created = (
-                    result["data"][0]
-                    if result and "data" in result and len(result["data"]) == 1
-                    else None
-                )
+                # Strategy: try to INSERT the event (session.add + flush) to avoid
+                # accidental UPDATE of existing rows. If the insert fails due to a
+                # uniqueness constraint, query the canonical row and return it.
+                try:
+                    # add event and flush to persist and populate PK
+                    self.session.add(event)
+                    await self.session.flush()
 
-                # logger.info(f"🔴 created event: {type(created)}")
+                    # if transitions exist (and are already loaded), attach them to the newly persisted event
+                    # Avoid triggering lazy-loading (which may attempt IO in unexpected contexts).
+                    transitions_attr = getattr(event, "__dict__", {}).get("transitions", None)
+                    if transitions_attr:
+                        for transition in transitions_attr:
+                            transition.event_id = event.id
+                            self.session.add(transition)
+                        # attach transitions without triggering lazy-loading by setting __dict__ directly
+                        event.__dict__["transitions"] = transitions_attr
+                    else:
+                        event.__dict__["transitions"] = []
 
-                if isinstance(created, Event):
-                    for transition in event.transitions:
-                        transition.event_id = created.id
-                        self.session.add(transition)
-                    created.transitions = event.transitions or []
-
-                    list_of_events.append(created)
+                    list_of_events.append(event)
+                except IntegrityError:
+                    # uniqueness constraint violated; attempt to fetch existing row
+                    try:
+                        found = None
+                        if event.external_uuid is not None:
+                            found = await self.event_crud.get(
+                                self.session,
+                                schema_to_select=Event,
+                                return_as_model=True,
+                                one_or_none=True,
+                                external_uuid=event.external_uuid,
+                                deleted_at__is=None,
+                            )
+                        if not found and event.id is not None:
+                            found = await self.event_crud.get(
+                                self.session,
+                                schema_to_select=Event,
+                                return_as_model=True,
+                                one_or_none=True,
+                                id=event.id,
+                                deleted_at__is=None,
+                            )
+                        if isinstance(found, Event):
+                            # Avoid lazy-loading transitions during conflict resolution; only use already-loaded data
+                            transitions_attr = getattr(found, "__dict__", {}).get("transitions", None)
+                            if transitions_attr:
+                                found.__dict__["transitions"] = transitions_attr
+                            else:
+                                found.__dict__["transitions"] = []
+                            list_of_events.append(found)
+                        else:
+                            # If we cannot resolve the existing row, return Err
+                            return Err(
+                                ErrorDetail(
+                                    error=ErrorCatalog.RUNTIME_FAILED.value,
+                                    detail="Conflict detected but existing event could not be resolved",
+                                )
+                            )
+                    except Exception as exc:  # pragma: no cover
+                        logger.exception("Error while resolving existing event after insert")
+                        return Err(
+                            ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+                        )
             # logger.info(f"🟢 Love is good {list_of_events}")
             return Ok(list_of_events)
         except Exception as exc:  # pragma: no cover - bubble up as Err

@@ -1,10 +1,9 @@
 from unittest.mock import AsyncMock, MagicMock
-from uuid import uuid4
 
 import pytest
 from result import Err, Ok
 
-from app.core.entities import Event, EventState
+from app.core.entities import EventState
 from app.core.usecases.event_usecases import EnqueueEventUseCase, EventUseCaseInput
 from app.errors import ErrorCatalog, ErrorDetail
 
@@ -28,7 +27,9 @@ class SpyRepo:
         return Ok(events)
 
     async def save(self, event):
-        return await self.saveMany([event])
+        # emulate repository.save: persist and return single Event wrapped in Ok
+        await self.saveMany([event])
+        return Ok(event)
 
 
 @pytest.mark.asyncio
@@ -39,6 +40,7 @@ async def test_enqueue_with_real_uow_patches_repo(mocker):
     session.flush = AsyncMock()
     session.execute = AsyncMock()
     session.close = AsyncMock()
+    session.rollback = AsyncMock()
 
     spy = SpyRepo()
 

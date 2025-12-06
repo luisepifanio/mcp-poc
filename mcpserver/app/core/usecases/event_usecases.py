@@ -9,6 +9,8 @@ from app.errors import ErrorCatalog, ErrorDetail
 from ..entities import Event, EventResultStructure, EventState, EventTransition, JSONDict
 from ..unit_of_work import UnitOfWork
 from ..usecase import AsyncUseCase
+import json
+from pydantic import ValidationError
 
 LOOKUP_EVENT_NAMES = {"GetEventById", "GetEventByExternalId"}
 
@@ -29,10 +31,10 @@ class EventUseCaseInput:
 @pydantic_dataclass(frozen=True)
 class EventUseCaseOutput:
     name: str = Field(max_length=100)
+    payload: JSONDict = Field()
     id: UUID = Field()
     state: EventState = Field()
     external_uuid: UUID | None = Field()
-    payload: JSONDict = Field(default_factory=dict)
     context: JSONDict | None = Field(default_factory=dict)
     # Declare the JSON column
     result: EventResultStructure | None = Field(default=None)
@@ -93,8 +95,17 @@ class EnqueueEventUseCase(
         self, input: EventUseCaseInput
     ) -> Result[EventUseCaseOutput, ErrorDetail]:
         """
-        Enqueue an event for processing. If an event with the same external_uuid or id (in that order)
-        already exists, it returns the existing event instead of creating a new one.
+        Enqueues an event for processing.
+        1. Assumes idempotency by external_uuid first, then by id second
+        2. Validation executed before saving an event
+            2.1 Allowed states to enqueue: CREATED or None (default to CREATED)
+            2.2 JSONDict fields are re-encoded with `json.dumps(data, sort_keys=True)` to ensure consistent storage and comparison and even hashing if needed
+            2.3 All pydantic validations are executed on inputs and before returning use case output
+        3. If an integrity error occurs (e.g., duplicate external_uuid or id ), it returns existing event with that identifier instead of creating a new one.
+        4. If event with the same external_uuid or id exists, it is returned as is, without any state changes.
+        5. The only responsability of this use case is to enqueue an event in PENDING state if it is new, there will be no processing logic here.
+        6. All related about processing event is on his own case `InLineProcessEventUseCase` and `AsyncProcessEventUseCase`
+
         Args:
             input (EventUseCaseInput): Input data for the event to be enqueued.
 
@@ -103,6 +114,18 @@ class EnqueueEventUseCase(
             If event has been just created it is expected to be in PENDING state, otherwise it is returned as is in current state.
         """
         # TODO: Migrate to functional approach result.map_or_else
+        # 1) Validate input pydantic dataclass (constructor should have run validations already)
+        try:
+            # Re-constructing a RootModel ensures pydantic validation of the dataclass fields
+            RootModel[EventUseCaseInput](input)
+        except ValidationError as exc:
+            return Err(
+                ErrorDetail(
+                    error=ErrorCatalog.VALIDATION_FAILED.value,
+                    detail=str(exc),
+                )
+            )
+
         async with self.uow:
             existing_event = None
             # Check by external_uuid first
@@ -140,13 +163,93 @@ class EnqueueEventUseCase(
                 case Err(error_detail) if (
                     error_detail.error == ErrorCatalog.NOT_FOUND.value
                 ):
-                    evt = self.as_event_entity(input)
+                    # Validate allowed enqueue state: only CREATED or None
+                    if input.state is not None and input.state is not EventState.CREATED:
+                        return Err(
+                            ErrorDetail(
+                                error=ErrorCatalog.VALIDATION_FAILED.value,
+                                detail=(
+                                    f"Invalid initial state for enqueue: {input.state}. "
+                                    "Only CREATED or None are allowed."
+                                ),
+                            )
+                        )
+
+                    # Normalize JSON fields to deterministic representation
+                    def _normalize(value: JSONDict | None) -> JSONDict | None:
+                        if value is None:
+                            return None
+                        try:
+                            return json.loads(json.dumps(value, sort_keys=True))
+                        except Exception:
+                            return value
+
+                    normalized_payload = _normalize(input.payload)
+                    normalized_context = _normalize(input.context)
+
+                    evt = Event(
+                        name=input.name,
+                        external_uuid=input.external_uuid,
+                        payload=normalized_payload or {},
+                        context=normalized_context or {},
+                        state=input.state or EventState.CREATED,
+                    )
+
+                    # apply transition to PENDING before saving (this use case only enqueues)
                     event_result = transition_event(evt, EventState.PENDING)
 
                     match event_result:
                         case Ok(event):
-                            await self.uow.events.save(evt)
-                            return Ok(self.as_output(event))
+                            save_result = await self.uow.events.save(evt)
+                            match save_result:
+                                case Ok(saved_event):
+                                    # `save` may return a single Event or a list with one Event
+                                    saved_model = None
+                                    if isinstance(saved_event, list):
+                                        if len(saved_event) == 1:
+                                            saved_model = saved_event[0]
+                                        else:
+                                            return Err(
+                                                ErrorDetail(
+                                                    error=ErrorCatalog.RUNTIME_FAILED.value,
+                                                    detail=(
+                                                        "Repository returned multiple events for single save"
+                                                    ),
+                                                )
+                                            )
+                                    else:
+                                        saved_model = saved_event
+
+                                    # Validate output via pydantic before returning
+                                    try:
+                                        out = self.as_output(saved_model)
+                                        RootModel[EventUseCaseOutput](out)
+                                    except ValidationError as exc:
+                                        return Err(
+                                            ErrorDetail(
+                                                error=ErrorCatalog.VALIDATION_FAILED.value,
+                                                detail=str(exc),
+                                            )
+                                        )
+                                    return Ok(out)
+
+                                case Err(err_detail):
+                                    # If integrity/unique constraint, try to return existing canonical entity
+                                    detail_text = (err_detail.detail or "").lower()
+                                    if "unique" in detail_text or "constraint" in detail_text:
+                                        # try to find by external_uuid then id
+                                        if evt.external_uuid is not None:
+                                            existing = await self.uow.events.get_by_external_uuid(
+                                                evt.external_uuid
+                                            )
+                                            if isinstance(existing, Ok):
+                                                return Ok(self.as_output(existing.unwrap()))
+                                        # fallback to id lookup
+                                        existing = await self.uow.events.getOne(evt.id)
+                                        if isinstance(existing, Ok):
+                                            return Ok(self.as_output(existing.unwrap()))
+                                    return Err(err_detail)
+
                         case Err(error):
                             return Err(error)
                 case _:
