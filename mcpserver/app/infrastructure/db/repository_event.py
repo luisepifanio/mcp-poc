@@ -58,7 +58,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                     else None
                 )
 
-                logger.info(f"🔴 created event: {type(created)}")
+                # logger.info(f"🔴 created event: {type(created)}")
 
                 if isinstance(created, Event):
                     for transition in event.transitions:
@@ -67,7 +67,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                     created.transitions = event.transitions or []
 
                     list_of_events.append(created)
-            logger.info(f"🟢 Love is good {list_of_events}")
+            # logger.info(f"🟢 Love is good {list_of_events}")
             return Ok(list_of_events)
         except Exception as exc:  # pragma: no cover - bubble up as Err
             logger.error(f"Error in saveMany: {exc}", exc_info=True)
@@ -179,7 +179,9 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                 ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
             )
 
-    async def getByExternalUUID(self, external_uuid: UUID) -> Result[Event, ErrorDetail]:
+    async def get_by_external_uuid(
+        self, external_uuid: UUID
+    ) -> Result[Event, ErrorDetail]:
         try:
             result = await self.event_crud.get(
                 self.session,
@@ -189,7 +191,6 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                 # return_total_count=True,
                 external_uuid=external_uuid,
                 deleted_at__is=None,  ## exclude soft-deleted
-                limit=None,
             )
 
             if result is None:

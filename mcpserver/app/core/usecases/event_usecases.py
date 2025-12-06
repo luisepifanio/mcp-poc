@@ -98,13 +98,13 @@ class EnqueueEventUseCase(
             # Check by external_uuid first
             if input.external_uuid is not None:
                 # Check if event with the same external_uuid already exists
-                existing_event = await self.uow.events.getByExternalUUID(
+                existing_event = await self.uow.events.get_by_external_uuid(
                     input.external_uuid
                 )
             match existing_event:
                 case Ok(event):
                     # Event with the same external_uuid already exists
-                    return self.as_output(event)
+                    return Ok(self.as_output(event))
 
             # Check by id if not found by external_uuid
             existing_event = (
