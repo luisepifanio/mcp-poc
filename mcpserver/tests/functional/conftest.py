@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel
 
 from app.core.logconfig import setup_logging
-from app.core.settings import getAppSettings
 
 # Get a logger for this module
 logger = logging.getLogger(__name__)

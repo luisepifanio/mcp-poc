@@ -1,5 +1,6 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork

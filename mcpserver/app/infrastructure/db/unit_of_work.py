@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.unit_of_work import UnitOfWork
 from .repository import AsyncSQLAlchemyCourseRepository
+from .repository_event import AsyncSQLAlchemyEventRepository
 
 
 class AsyncSQLAlchwemyUnitOfWork(UnitOfWork):
@@ -12,6 +13,7 @@ class AsyncSQLAlchwemyUnitOfWork(UnitOfWork):
     async def __aenter__(self) -> "UnitOfWork":
         self.session = self.__internal_session
         self.courses = AsyncSQLAlchemyCourseRepository(self.session)
+        self.events = AsyncSQLAlchemyEventRepository(self.session)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
