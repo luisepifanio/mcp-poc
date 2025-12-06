@@ -1,0 +1,66 @@
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
+
+import pytest
+from result import Err, Ok
+
+from app.core.entities import Event, EventState
+from app.core.usecases.event_usecases import EnqueueEventUseCase, EventUseCaseInput
+from app.errors import ErrorCatalog, ErrorDetail
+
+
+class SpyRepo:
+    def __init__(self):
+        self.saved = None
+
+    async def get_by_external_uuid(self, external_uuid):
+        return Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no"))
+
+    async def getOne(self, id_):
+        return Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no"))
+
+    async def getMany(self, ids):
+        return Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no"))
+
+    async def saveMany(self, events):
+        # emulate DB assigning PENDING state already done by use case
+        self.saved = events
+        return Ok(events)
+
+    async def save(self, event):
+        return await self.saveMany([event])
+
+
+@pytest.mark.asyncio
+async def test_enqueue_with_real_uow_patches_repo(mocker):
+    # Prepare a fake AsyncSession similar to other tests
+    session = MagicMock()
+    session.commit = AsyncMock()
+    session.flush = AsyncMock()
+    session.execute = AsyncMock()
+    session.close = AsyncMock()
+
+    spy = SpyRepo()
+
+    # Patch AsyncSQLAlchemyEventRepository used by the UnitOfWork to return our spy
+    mocker.patch(
+        "app.infrastructure.db.unit_of_work.AsyncSQLAlchemyEventRepository",
+        return_value=spy,
+    )
+
+    # Import here to avoid import-time side effects
+    from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
+
+    async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
+        uc = EnqueueEventUseCase(uow)
+        inp = EventUseCaseInput(
+            name="functional-test", external_uuid=None, payload={"functional": True}
+        )
+        res = await uc.execute(inp)
+
+        assert isinstance(res, Ok)
+        out = res.unwrap()
+        # ensure the spy repo saved something
+        assert spy.saved is not None
+        assert out.name == "functional-test"
+        assert out.state == EventState.PENDING

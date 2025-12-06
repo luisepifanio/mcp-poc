@@ -16,9 +16,9 @@ LOOKUP_EVENT_NAMES = {"GetEventById", "GetEventByExternalId"}
 @pydantic_dataclass(frozen=True)
 class EventUseCaseInput:
     name: str = Field(max_length=100)
+    payload: JSONDict = Field()
     id: UUID | None = Field(default_factory=uuid4)
     external_uuid: UUID | None = Field(default_factory=uuid4)
-    payload: JSONDict = Field(default_factory=dict)
     context: JSONDict | None = Field(default_factory=dict)
     state: EventState | None = EventState.CREATED
 
@@ -92,6 +92,16 @@ class EnqueueEventUseCase(
     async def execute(
         self, input: EventUseCaseInput
     ) -> Result[EventUseCaseOutput, ErrorDetail]:
+        """
+        Enqueue an event for processing. If an event with the same external_uuid or id (in that order)
+        already exists, it returns the existing event instead of creating a new one.
+        Args:
+            input (EventUseCaseInput): Input data for the event to be enqueued.
+
+        Returns:
+            Result[EventUseCaseOutput, ErrorDetail]: Result containing the enqueued event output or an error detail.
+            If event has been just created it is expected to be in PENDING state, otherwise it is returned as is in current state.
+        """
         # TODO: Migrate to functional approach result.map_or_else
         async with self.uow:
             existing_event = None
