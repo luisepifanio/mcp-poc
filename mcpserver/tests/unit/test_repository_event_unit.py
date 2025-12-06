@@ -23,6 +23,8 @@ async def test_get_by_external_uuid_success(mocker):
     # Patch FastCRUD.get to return the Event instance
     mocker.patch("fastcrud.FastCRUD.get", return_value=ev)
 
+    assert ev.external_uuid is not None
+
     result = await repo.get_by_external_uuid(ev.external_uuid)
 
     assert isinstance(result, Ok)

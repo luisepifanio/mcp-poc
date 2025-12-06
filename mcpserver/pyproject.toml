@@ -84,6 +84,12 @@ testpaths = [
 # Agrega esta línea:
 pythonpath = ["."]
 
+filterwarnings = [
+    "ignore:Can't validate argument 'sa_type'; can't locate any SQLAlchemy dialect named 'sa':sqlalchemy.exc.SAWarning",
+    "ignore:The `__get_pydantic_core_schema__` method of the `BaseModel` class is deprecated.:DeprecationWarning",
+    "ignore::pytest.PytestConfigWarning",
+]
+
 [tool.coverage.run]
 branch = true
 source = ["app"] # Ajusta el nombre del módulo
