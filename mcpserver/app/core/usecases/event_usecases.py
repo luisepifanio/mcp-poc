@@ -1,6 +1,7 @@
+import json
 from uuid import UUID, uuid4
 
-from pydantic import Field, RootModel
+from pydantic import Field, RootModel, ValidationError
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from result import Err, Ok, Result
 
@@ -9,8 +10,6 @@ from app.errors import ErrorCatalog, ErrorDetail
 from ..entities import Event, EventResultStructure, EventState, EventTransition, JSONDict
 from ..unit_of_work import UnitOfWork
 from ..usecase import AsyncUseCase
-import json
-from pydantic import ValidationError
 
 LOOKUP_EVENT_NAMES = {"GetEventById", "GetEventByExternalId"}
 
@@ -236,14 +235,19 @@ class EnqueueEventUseCase(
                                 case Err(err_detail):
                                     # If integrity/unique constraint, try to return existing canonical entity
                                     detail_text = (err_detail.detail or "").lower()
-                                    if "unique" in detail_text or "constraint" in detail_text:
+                                    if (
+                                        "unique" in detail_text
+                                        or "constraint" in detail_text
+                                    ):
                                         # try to find by external_uuid then id
                                         if evt.external_uuid is not None:
                                             existing = await self.uow.events.get_by_external_uuid(
                                                 evt.external_uuid
                                             )
                                             if isinstance(existing, Ok):
-                                                return Ok(self.as_output(existing.unwrap()))
+                                                return Ok(
+                                                    self.as_output(existing.unwrap())
+                                                )
                                         # fallback to id lookup
                                         existing = await self.uow.events.getOne(evt.id)
                                         if isinstance(existing, Ok):

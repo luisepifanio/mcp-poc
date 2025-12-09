@@ -4,9 +4,9 @@ from uuid import uuid4
 import pytest
 from result import Err, Ok
 
+from app.core.entities import EventState
 from app.core.usecases.event_usecases import EnqueueEventUseCase, EventUseCaseInput
 from app.errors import ErrorCatalog, ErrorDetail
-from app.core.entities import EventState
 
 
 class ConflictSpyRepo:
@@ -31,7 +31,11 @@ class ConflictSpyRepo:
         return Ok([self.existing])
 
     async def saveMany(self, events):
-        return Err(ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail="UNIQUE constraint failed"))
+        return Err(
+            ErrorDetail(
+                error=ErrorCatalog.RUNTIME_FAILED.value, detail="UNIQUE constraint failed"
+            )
+        )
 
     async def save(self, event):
         return await self.saveMany([event])
@@ -57,7 +61,12 @@ async def test_enqueue_rejects_invalid_initial_state(mocker):
 
     async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
         uc = EnqueueEventUseCase(uow)
-        inp = EventUseCaseInput(name="badstate", external_uuid=uuid4(), payload={}, state=EventState.PROCESSING)
+        inp = EventUseCaseInput(
+            name="badstate",
+            external_uuid=uuid4(),
+            payload={},
+            state=EventState.PROCESSING,
+        )
         res = await uc.execute(inp)
         assert isinstance(res, Err)
         assert res.unwrap_err().error == ErrorCatalog.VALIDATION_FAILED.value
@@ -115,7 +124,9 @@ async def test_payload_normalization_before_save(mocker):
         assert isinstance(res, Ok)
         # confirm saved payload normalized deterministically
         saved = spy.saved[0]
-        assert json.dumps(saved.payload, sort_keys=True) == json.dumps(payload, sort_keys=True)
+        assert json.dumps(saved.payload, sort_keys=True) == json.dumps(
+            payload, sort_keys=True
+        )
 
 
 @pytest.mark.asyncio
@@ -145,7 +156,9 @@ async def test_integrity_conflict_returns_existing(mocker):
 
     async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
         uc = EnqueueEventUseCase(uow)
-        inp = EventUseCaseInput(name="new-one", external_uuid=existing.external_uuid, payload={})
+        inp = EventUseCaseInput(
+            name="new-one", external_uuid=existing.external_uuid, payload={}
+        )
         res = await uc.execute(inp)
         assert isinstance(res, Ok)
         out = res.unwrap()

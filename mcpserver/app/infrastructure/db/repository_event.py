@@ -53,7 +53,9 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
                     # if transitions exist (and are already loaded), attach them to the newly persisted event
                     # Avoid triggering lazy-loading (which may attempt IO in unexpected contexts).
-                    transitions_attr = getattr(event, "__dict__", {}).get("transitions", None)
+                    transitions_attr = getattr(event, "__dict__", {}).get(
+                        "transitions", None
+                    )
                     if transitions_attr:
                         for transition in transitions_attr:
                             transition.event_id = event.id
@@ -88,7 +90,9 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                             )
                         if isinstance(found, Event):
                             # Avoid lazy-loading transitions during conflict resolution; only use already-loaded data
-                            transitions_attr = getattr(found, "__dict__", {}).get("transitions", None)
+                            transitions_attr = getattr(found, "__dict__", {}).get(
+                                "transitions", None
+                            )
                             if transitions_attr:
                                 found.__dict__["transitions"] = transitions_attr
                             else:
@@ -103,9 +107,13 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                                 )
                             )
                     except Exception as exc:  # pragma: no cover
-                        logger.exception("Error while resolving existing event after insert")
+                        logger.exception(
+                            "Error while resolving existing event after insert"
+                        )
                         return Err(
-                            ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+                            ErrorDetail(
+                                error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc)
+                            )
                         )
             # logger.info(f"🟢 Love is good {list_of_events}")
             return Ok(list_of_events)
