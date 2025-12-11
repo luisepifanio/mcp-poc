@@ -4,7 +4,6 @@ from typing import TypedDict, cast
 from uuid import UUID
 
 from fastcrud import FastCRUD
-from fastcrud.types import UpsertMultiResponseDict, UpsertMultiResponseModel
 from result import Err, Ok, Result
 from sqlalchemy.ext.asyncio import AsyncSession
 

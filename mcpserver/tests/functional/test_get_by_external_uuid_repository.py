@@ -1,12 +1,12 @@
 import logging
 from collections.abc import AsyncGenerator
 from datetime import datetime
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from result import Err, Ok
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import col, delete, select
+from sqlmodel import col, delete
 
 from app.core.entities import Event, EventState
 from app.infrastructure.db.repository_event import AsyncSQLAlchemyEventRepository

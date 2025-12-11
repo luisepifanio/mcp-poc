@@ -3,7 +3,7 @@ from uuid import uuid4
 import pytest
 from result import Err, Ok
 
-from app.core.entities import Event, EventState
+from app.core.entities import EventState
 from app.core.usecases.event_usecases import EnqueueEventUseCase, EventUseCaseInput
 from app.errors import ErrorCatalog, ErrorDetail
 

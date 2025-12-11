@@ -1,6 +1,7 @@
 from scrapy import signals
 from scrapy.http import Request
 
+
 class CookieMiddleware:
     def __init__(self, cookies):
         self.cookies = cookies
@@ -17,4 +18,3 @@ class CookieMiddleware:
     def process_request(self, request: Request, spider):
         if self.cookies:
             request.cookies.update(self.cookies)
-        

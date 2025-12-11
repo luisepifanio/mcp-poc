@@ -10,8 +10,6 @@ from uuid import (
 from zoneinfo import ZoneInfo
 
 from sqlmodel import (  # , UUID
-    TIMESTAMP,
-    Column,
     Field,
     SQLModel,
     text,
