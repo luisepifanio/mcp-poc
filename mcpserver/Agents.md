@@ -628,9 +628,11 @@ jobs:
           file: ./dist/reports/coverage/coverage.xml
 ```
 
-### Pre-commit Hooks (recomendado)
+### Pre-commit Hooks (🚧 Pendiente de Implementar)
 
-Para garantizar calidad antes de commits, se recomienda configurar pre-commit hooks:
+> **Estado**: Planificado para implementar. Los hooks asegurarán que linting, type checking y **tests pasen antes de cada commit/push**.
+
+Para garantizar calidad antes de commits, se configurarán pre-commit hooks:
 
 ```bash
 # Instalar pre-commit
@@ -640,7 +642,7 @@ uv add --dev pre-commit
 uv run pre-commit install
 ```
 
-**Archivo `.pre-commit-config.yaml`** (ejemplo):
+**Archivo `.pre-commit-config.yaml`** (ejemplo planificado):
 
 ```yaml
 repos:
@@ -656,7 +658,44 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [types-all]
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
 ```
+
+#### ⚠️ Regla de Calidad: Tests Deben Pasar Antes de Commit/Push
+
+**Política**: Todos los tests deben pasar antes de realizar un commit o push. Esta regla será enforced automáticamente una vez implementados los pre-commit hooks.
+
+**Verificación manual (hasta que pre-commit esté implementado)**:
+```bash
+# Antes de commit
+uv run ruff check . && uv run pytest -q
+
+# Si todo pasa, hacer commit
+git commit -m "..."
+```
+
+#### Mecanismo de Emergencia
+
+En situaciones excepcionales donde se necesite hacer commit sin pasar los checks (ej: WIP temporal, hotfix urgente):
+
+```bash
+# Bypass de pre-commit hooks (usar con extrema precaución)
+git commit --no-verify -m "WIP: descripción"
+
+# Bypass en push
+git push --no-verify
+```
+
+**⚠️ Importante**: El bypass debe ser temporal. Se espera que el siguiente commit corrija los issues y pase todos los checks.
 
 ---
 

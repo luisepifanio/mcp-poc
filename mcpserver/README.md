@@ -30,6 +30,23 @@ Ver [Agents.md](Agents.md) para más detalles y ejemplos.
 
 ---
 
+## 🚧 Pre-commit Hooks (Pendiente)
+
+**Estado**: Planificado. Los hooks asegurarán que tests pasen antes de cada commit/push.
+
+**Verificación manual (hasta que pre-commit esté implementado)**:
+```bash
+uv run ruff check . && uv run pytest -q
+```
+
+**Mecanismo de emergencia** (bypass temporal):
+```bash
+git commit --no-verify -m "WIP: descripción"
+git push --no-verify
+```
+
+---
+
 ## Testing tips (caché de settings)
 
 - Si un test necesita modificar variables de entorno (p. ej. `DATABASE_URL`), es importante asegurarse de que la caché de configuración se limpie después del test para evitar contaminación entre pruebas.
