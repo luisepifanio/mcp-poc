@@ -13,11 +13,14 @@ from app.infrastructure.db.repository_event import AsyncSQLAlchemyEventRepositor
 
 @pytest.mark.asyncio
 async def test_saveMany_success_sets_transitions_and_returns_events():
-    # Use MagicMock WITHOUT spec=AsyncSession so isinstance(session, AsyncSession)
-    # returns False and the code uses the fallback path for non-real sessions
+    # Configure mock session with all required async methods
     session = MagicMock()
     session.flush = AsyncMock()
     session.add = MagicMock()
+    # Mock execute for eager loading (returns the same events)
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = []
+    session.execute = AsyncMock(return_value=mock_result)
 
     repo = AsyncSQLAlchemyEventRepository(session)
 
@@ -29,8 +32,10 @@ async def test_saveMany_success_sets_transitions_and_returns_events():
     assert isinstance(lst, list)
     assert len(lst) == 1
     returned = lst[0]
-    # transitions should be present as an empty list
-    assert isinstance(returned.__dict__.get("transitions"), list)
+    # transitions should be accessible (set via instrumented assignment or getattr)
+    transitions = getattr(returned, "transitions", None)
+    assert transitions is not None
+    assert isinstance(transitions, list)
 
 
 @pytest.mark.asyncio

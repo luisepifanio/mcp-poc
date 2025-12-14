@@ -162,28 +162,57 @@ mcpserver/
 from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
 from pytest_mock import MockerFixture
-```
 
-**Alternativas correctas**:
-- **Duck typing**: En lugar de `isinstance(obj, MagicMock)`, usar `isinstance(obj, RealClass)` o verificar atributos
-- **Inyección de dependencias**: Pasar comportamientos como parámetros en lugar de detectar mocks
-- **Interfaces/Protocolos**: Definir contratos que tanto implementaciones reales como mocks cumplan
-
-**Ejemplo de refactorización**:
-```python
-# ❌ INCORRECTO
-from unittest.mock import MagicMock
+# ❌ INCORRECTO - Lógica condicional para detectar mocks
 if isinstance(self.session, MagicMock):
     # código para tests
 else:
     # código real
 
-# ✅ CORRECTO  
-from sqlalchemy.ext.asyncio import AsyncSession
+# ❌ INCORRECTO - Checks de tipo para diferenciar mocks de producción
 if isinstance(self.session, AsyncSession):
     # código real
 else:
-    # fallback para cualquier otro tipo (mocks incluidos)
+    # fallback para mocks
+```
+
+**Principio: Diseño por Contrato**
+
+Si el constructor define `self.session: AsyncSession = session`, el código debe confiar en ese contrato. No contaminar producción con lógica para detectar mocks.
+
+**Alternativas correctas**:
+- **Confiar en el contrato de tipos**: El código asume que recibe el tipo correcto. Si falla, usar try/except como fallback genérico.
+- **Mocks completos en tests**: Los tests unitarios deben configurar mocks que simulen el comportamiento real completo.
+- **Inyección de dependencias**: Para comportamientos alternativos, inyectar estrategias o factories.
+
+**Ejemplo correcto en producción**:
+```python
+class AsyncSQLAlchemyEventRepository:
+    def __init__(self, session: AsyncSession):
+        self.session: AsyncSession = session  # Contrato: siempre AsyncSession
+    
+    async def _eager_load_transitions(self, events: list[Event]) -> list[Event]:
+        # ✅ CORRECTO: Código puro, sin checks de tipo
+        try:
+            result = await self.session.execute(query)
+            # ... procesar resultado
+        except Exception:
+            # Fallback genérico si algo falla
+            return events
+```
+
+**Ejemplo correcto en tests**:
+```python
+# ✅ CORRECTO: Mock configura comportamiento completo
+session = MagicMock()
+session.flush = AsyncMock()
+session.add = MagicMock()
+# Mock execute para eager loading
+mock_result = MagicMock()
+mock_result.scalars.return_value.all.return_value = [event]
+session.execute = AsyncMock(return_value=mock_result)
+
+repo = AsyncSQLAlchemyEventRepository(session)
 ```
 
 #### Linting y Formatting

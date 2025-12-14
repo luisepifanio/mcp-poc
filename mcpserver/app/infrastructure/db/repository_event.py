@@ -199,22 +199,13 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
     def _ensure_transitions_collection(self, event: Event) -> None:
         """Ensure transitions collection exists without breaking SQLAlchemy internals."""
         try:
-            if isinstance(self.session, AsyncSession):
-                # Real session: use instrumented assignment
-                if getattr(event, "transitions", None) is None:
-                    event.transitions = []
-            else:
-                # Non-real session (mocks, stubs): use plain list in __dict__
-                event.__dict__.setdefault("transitions", [])
+            if getattr(event, "transitions", None) is None:
+                event.transitions = []
         except Exception:
             pass
 
     async def _eager_load_transitions(self, list_of_events: list[Event]) -> list[Event]:
         """Eager-load transitions to prevent lazy-load outside greenlet context."""
-        if not isinstance(self.session, AsyncSession):
-            # Non-real session (mocks, stubs): skip eager loading
-            return list_of_events
-
         try:
             ids = [ev.id for ev in list_of_events if ev.id is not None]
             if not ids:
