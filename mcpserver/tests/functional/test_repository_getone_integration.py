@@ -8,11 +8,10 @@ from app.errors import ErrorCatalog
 
 
 @pytest.mark.asyncio
-async def test_asyncsqlalchemyeventrepo_getone_ok_and_not_found():
+async def test_asyncsqlalchemyeventrepo_getone_ok_and_not_found(async_session_local):
     """Integration test: persist an Event via the real repository and verify getOne behavior."""
-    from app.infrastructure.db.connection import get_session_local
-
-    AsyncSessionLocal = await get_session_local()
+    # Use the shared session factory from fixture
+    AsyncSessionLocal = async_session_local
 
     # Use a fresh async session and the real UnitOfWork which instantiates the real repo
     async with AsyncSessionLocal() as session:

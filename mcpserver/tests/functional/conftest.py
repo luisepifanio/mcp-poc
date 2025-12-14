@@ -85,6 +85,18 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest_asyncio.fixture(scope="session")
+async def async_session_local():
+    """Provides the `AsyncSession` factory (`async_sessionmaker`) used by tests.
+
+    Returns the value produced by `app.infrastructure.db.connection.get_session_local()`
+    so tests only depend on the fixture name and not the import call.
+    """
+    from app.infrastructure.db.connection import get_session_local
+
+    return await get_session_local()
+
+
+@pytest_asyncio.fixture(scope="session")
 async def dbsession() -> AsyncGenerator[AsyncSession, None]:
     from app.infrastructure.db.connection import get_session_local
 

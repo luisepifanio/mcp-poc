@@ -8,7 +8,7 @@ from app.core.usecases.event_usecases import EnqueueEventUseCase, EventUseCaseIn
 
 
 @pytest.mark.asyncio
-async def test_enqueue_concurrent_idempotency():
+async def test_enqueue_concurrent_idempotency(async_session_local):
     """Run two EnqueueEventUseCase executions concurrently using two DB sessions.
 
     Expectation:
@@ -16,10 +16,8 @@ async def test_enqueue_concurrent_idempotency():
     - Both results reference the same canonical event (same id & external_uuid)
     - Only one event is ultimately persisted for that external_uuid
     """
-    # Get session factory
-    from app.infrastructure.db.connection import get_session_local
-
-    AsyncSessionLocal = await get_session_local()
+    # Get session factory from fixture
+    AsyncSessionLocal = async_session_local
 
     external = uuid4()
 
