@@ -11,7 +11,7 @@ from app.infrastructure.db.repository_event import AsyncSQLAlchemyEventRepositor
 
 
 @pytest.mark.asyncio
-async def test_saveMany_with_preloaded_transitions(_mocker):
+async def test_saveMany_with_preloaded_transitions():
     session = MagicMock(spec=AsyncSession)
     session.flush = AsyncMock()
     session.add = MagicMock()
