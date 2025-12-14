@@ -175,16 +175,8 @@ class EnqueueEventUseCase(
                         )
 
                     # Normalize JSON fields to deterministic representation
-                    def _normalize(value: JSONDict | None) -> JSONDict | None:
-                        if value is None:
-                            return None
-                        try:
-                            return json.loads(json.dumps(value, sort_keys=True))
-                        except Exception:
-                            return value
-
-                    normalized_payload = _normalize(input.payload)
-                    normalized_context = _normalize(input.context)
+                    normalized_payload = self._normalize_json(input.payload)
+                    normalized_context = self._normalize_json(input.context)
 
                     evt = Event(
                         name=input.name,
@@ -278,6 +270,21 @@ class EnqueueEventUseCase(
             context=dict(input.context) if input.context else {},
             state=input.state or EventState.CREATED,
         )
+
+    @staticmethod
+    def _normalize_json(value: JSONDict | None) -> JSONDict | None:
+        """Return a deterministic JSON-compatible mapping for storage/comparison.
+
+        The function serializes with `sort_keys=True` and deserializes back to
+        a dict to ensure stable ordering of nested mappings. If serialization
+        fails for any reason, the original value is returned unchanged.
+        """
+        if value is None:
+            return None
+        try:
+            return json.loads(json.dumps(value, sort_keys=True))
+        except Exception:
+            return value
 
     def as_output(self, event: Event) -> EventUseCaseOutput:
         return EventUseCaseOutput(
