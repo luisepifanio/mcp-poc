@@ -95,7 +95,11 @@ class EventRepository(ABC):
 
     @abstractmethod
     async def saveMany(self, events: list[Event]) -> Result[list[Event], ErrorDetail]:
-        """Inserts or updates multiple events in the repository.
+        """Inserts multiple events in the repository.
+
+        This is the basic insert operation. It will FAIL on integrity errors
+        (e.g., duplicate unique keys) without attempting to resolve conflicts.
+        Use this when you want strict insert-only semantics.
 
         Args:
             events (list[Event]): The events to be saved.
@@ -105,8 +109,34 @@ class EventRepository(ABC):
         """
         pass
 
+    @abstractmethod
+    async def save_or_resolve(
+        self, events: list[Event]
+    ) -> Result[list[Event], ErrorDetail]:
+        """Inserts events or resolves to existing ones on conflict.
+
+        This method uses SAVEPOINTs to isolate each insert attempt. If an
+        IntegrityError occurs (e.g., duplicate unique key), only the savepoint
+        is rolled back, NOT the entire transaction. The existing canonical
+        row is then fetched and returned.
+
+        Use this for idempotent operations where conflicts should resolve
+        gracefully without breaking the parent transaction.
+
+        Args:
+            events (list[Event]): The events to be saved or resolved.
+        Returns:
+            Result[list[Event], ErrorDetail]: A list of event instances
+            (either newly inserted or existing canonical rows).
+        """
+        pass
+
     async def save(self, event: Event) -> Result[Event, ErrorDetail]:
-        """Inserts or updates an event in the repository.
+        """Inserts a single event in the repository.
+
+        Delegates to saveMany(). This is a strict insert operation that will
+        FAIL on integrity errors. For idempotent save-or-resolve semantics,
+        use save_or_resolve() instead.
 
         Args:
             event (Event): The event to be saved.

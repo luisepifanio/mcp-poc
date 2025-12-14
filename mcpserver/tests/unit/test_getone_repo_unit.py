@@ -24,6 +24,10 @@ class DummyRepo(EventRepository):
     async def saveMany(self, events: list):
         return Ok([])
 
+    async def save_or_resolve(self, events: list):
+        """Idempotent save - returns saved or existing events."""
+        return Ok(events)
+
 
 @pytest.mark.asyncio
 async def test_getone_propagates_err_from_getmany():

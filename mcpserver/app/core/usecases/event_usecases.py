@@ -191,25 +191,23 @@ class EnqueueEventUseCase(
 
                     match event_result:
                         case Ok(event):
-                            save_result = await self.uow.events.save(evt)
+                            # Use save_or_resolve for idempotent behavior:
+                            # - Uses SAVEPOINTs to isolate each insert
+                            # - On conflict, resolves to existing row without breaking transaction
+                            save_result = await self.uow.events.save_or_resolve([evt])
                             match save_result:
-                                case Ok(saved_event):
-                                    # `save` may return a single Event or a list with one Event
-                                    saved_model = None
-                                    if isinstance(saved_event, list):
-                                        if len(saved_event) == 1:
-                                            saved_model = saved_event[0]
-                                        else:
-                                            return Err(
-                                                ErrorDetail(
-                                                    error=ErrorCatalog.RUNTIME_FAILED.value,
-                                                    detail=(
-                                                        "Repository returned multiple events for single save"
-                                                    ),
-                                                )
+                                case Ok(saved_events):
+                                    # save_or_resolve returns a list
+                                    if len(saved_events) != 1:
+                                        return Err(
+                                            ErrorDetail(
+                                                error=ErrorCatalog.RUNTIME_FAILED.value,
+                                                detail=(
+                                                    "Repository returned unexpected number of events"
+                                                ),
                                             )
-                                    else:
-                                        saved_model = saved_event
+                                        )
+                                    saved_model = saved_events[0]
 
                                     # Validate output via pydantic before returning
                                     try:

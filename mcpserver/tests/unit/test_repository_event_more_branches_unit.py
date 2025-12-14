@@ -36,20 +36,21 @@ async def test_saveMany_with_preloaded_transitions():
 
 
 @pytest.mark.asyncio
-async def test_saveMany_integrity_rollback_raises_but_resolution_continues(mocker):
+async def test_save_or_resolve_integrity_with_savepoint(mocker):
+    """Test that save_or_resolve handles IntegrityError within savepoint and resolves."""
     session = MagicMock(spec=AsyncSession)
 
     def _raise(*_args, **_kwargs):
         raise IntegrityError("stmt", {}, Exception("orig"))
 
-    # flush raises IntegrityError, rollback raises Exception to hit inner except
     session.flush = AsyncMock(side_effect=_raise)
-
-    def _rb_raise(*_args, **_kwargs):
-        raise RuntimeError("rollback failed")
-
-    session.rollback = MagicMock(side_effect=_rb_raise)
     session.add = MagicMock()
+
+    # Mock begin_nested to return an async context manager
+    nested_ctx = MagicMock()
+    nested_ctx.__aenter__ = AsyncMock(return_value=None)
+    nested_ctx.__aexit__ = AsyncMock(return_value=False)
+    session.begin_nested = MagicMock(return_value=nested_ctx)
 
     repo = AsyncSQLAlchemyEventRepository(session)
 
@@ -60,21 +61,27 @@ async def test_saveMany_integrity_rollback_raises_but_resolution_continues(mocke
         name="conflict", external_uuid=existing.external_uuid, state=EventState.CREATED
     )
 
-    res = await repo.saveMany([ev])
+    res = await repo.save_or_resolve([ev])
     assert isinstance(res, Ok)
     assert res.unwrap()[0].external_uuid == existing.external_uuid
 
 
 @pytest.mark.asyncio
-async def test_saveMany_conflict_uses_id_lookup_when_no_external_uuid(mocker):
+async def test_save_or_resolve_conflict_uses_id_lookup_when_no_external_uuid(mocker):
+    """Test save_or_resolve falls back to id lookup when external_uuid is None."""
     session = MagicMock(spec=AsyncSession)
 
     def _raise(*_args, **_kwargs):
         raise IntegrityError("stmt", {}, Exception("orig"))
 
     session.flush = AsyncMock(side_effect=_raise)
-    session.rollback = AsyncMock()
     session.add = MagicMock()
+
+    # Mock begin_nested to return an async context manager
+    nested_ctx = MagicMock()
+    nested_ctx.__aenter__ = AsyncMock(return_value=None)
+    nested_ctx.__aexit__ = AsyncMock(return_value=False)
+    session.begin_nested = MagicMock(return_value=nested_ctx)
 
     repo = AsyncSQLAlchemyEventRepository(session)
 
@@ -93,7 +100,7 @@ async def test_saveMany_conflict_uses_id_lookup_when_no_external_uuid(mocker):
     ev = Event(name="conflict", external_uuid=None, state=EventState.CREATED)
     ev.id = uuid4()
 
-    res = await repo.saveMany([ev])
+    res = await repo.save_or_resolve([ev])
     assert isinstance(res, Ok)
     assert res.unwrap()[0] is existing
 

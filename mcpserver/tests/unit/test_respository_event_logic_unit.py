@@ -24,6 +24,10 @@ class FakeRepo(EventRepository):
     async def saveMany(self, events: list):
         return self._many_return
 
+    async def save_or_resolve(self, events: list):
+        """Idempotent save - returns saved or existing events."""
+        return self._many_return
+
 
 @pytest.mark.asyncio
 async def test_getone_success_and_failure_cases():

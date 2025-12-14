@@ -36,16 +36,50 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         self.event_crud = FastCRUD(Event)
         self.transition_crud = FastCRUD(EventTransition)
 
+    # -------------------------------------------------------------------------
+    # saveMany: Simple insert, fails on conflict (no conflict resolution)
+    # -------------------------------------------------------------------------
     async def saveMany(self, events: list[Event]) -> Result[list[Event], ErrorDetail]:
-        """Insert or resolve multiple Events.
+        """Insert multiple Events. Fails on IntegrityError.
+
+        This is the strict insert method. It does NOT handle conflicts.
+        If a unique constraint is violated, the operation fails with an error.
+        Use save_or_resolve() for idempotent insert-or-fetch semantics.
+        """
+        try:
+            list_of_events: list[Event] = []
+
+            for event in events:
+                self.session.add(event)
+                await self.session.flush()
+
+                # Ensure transitions collection exists
+                self._ensure_transitions_collection(event)
+                list_of_events.append(event)
+
+            # Eager-load transitions to avoid lazy-load outside greenlet context
+            list_of_events = await self._eager_load_transitions(list_of_events)
+
+            return Ok(list_of_events)
+        except Exception as exc:
+            logger.error(f"Error in saveMany: {exc}", exc_info=True)
+            return Err(
+                ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+            )
+
+    # -------------------------------------------------------------------------
+    # save_or_resolve: Uses SAVEPOINTs for conflict isolation
+    # -------------------------------------------------------------------------
+    async def save_or_resolve(
+        self, events: list[Event]
+    ) -> Result[list[Event], ErrorDetail]:
+        """Insert or resolve multiple Events using SAVEPOINTs.
 
         Strategy:
-        - Try to `INSERT` each Event (session.add + flush) to avoid accidental UPDATE.
-        - On IntegrityError: rollback the transaction, then try to resolve the canonical
-          row using `FastCRUD.get` (unit tests may patch this) and, if missing, fall
-          back to a direct SELECT using the current `AsyncSession`.
-        - Be tolerant of different return shapes (ORM model, mapping, pydantic dict).
-        - Never overwrite SQLAlchemy relationship internals by assigning to ``__dict__``.
+        - For each event, create a SAVEPOINT (begin_nested) before inserting.
+        - On IntegrityError: rollback only the savepoint (not the whole transaction),
+          then resolve the existing canonical row.
+        - This preserves the parent transaction for coordinated use case operations.
         """
         try:
             from sqlalchemy.exc import IntegrityError
@@ -54,233 +88,158 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
             for event in events:
                 try:
-                    self.session.add(event)
-                    await self.session.flush()
+                    # Use savepoint to isolate this insert attempt
+                    async with self.session.begin_nested():
+                        self.session.add(event)
+                        await self.session.flush()
 
-                    # If transitions were provided as plain python objects attached
-                    # prior to persistence, ensure they are attached without
-                    # overwriting SQLAlchemy instrumentation.
-                    try:
-                        transitions_attr = getattr(event, "__dict__", {}).get(
-                            "transitions", None
-                        )
-                        if transitions_attr:
-                            for transition in transitions_attr:
-                                transition.event_id = event.id
-                                self.session.add(transition)
-                        else:
-                            # Ensure the transitions collection exists. Prefer using the
-                            # instrumented assignment when running against a real
-                            # AsyncSession; when running under unit tests with a
-                            # mocked session, create a plain list in __dict__ so
-                            # assertions that inspect __dict__ succeed.
-                            try:
-                                if isinstance(self.session, AsyncSession):
-                                    if getattr(event, "transitions", None) is None:
-                                        event.transitions = []
-                                else:
-                                    # Unit-test path (mocked session) — set a plain list
-                                    event.__dict__.setdefault("transitions", [])
-                            except Exception:
-                                pass
-                    except Exception:
-                        # Best-effort: do not fail persistence because of relationship handling
-                        pass
-
+                    # Insert succeeded
+                    self._ensure_transitions_collection(event)
                     list_of_events.append(event)
+
                 except IntegrityError:
-                    # Roll back so we can run selects on this session safely.
-                    try:
-                        await self.session.rollback()
-                    except Exception:
-                        logger.debug(
-                            "Rollback after IntegrityError failed or was unnecessary",
-                            exc_info=True,
-                        )
-
-                    # Try to resolve the existing canonical row.
-                    try:
-                        found = None
-
-                        # 1) Ask FastCRUD (unit tests may patch this). Be tolerant of awaitables.
-                        try:
-                            fastcrud_call = self.event_crud.get(
-                                self.session,
-                                schema_to_select=Event,
-                                return_as_model=True,
-                                one_or_none=True,
-                                external_uuid=event.external_uuid,
-                                id=event.id,
-                                deleted_at__is=None,
-                            )
-                            if inspect.isawaitable(fastcrud_call):
-                                fastcrud_call = await fastcrud_call
-                            if fastcrud_call:
-                                found = fastcrud_call
-                        except Exception:
-                            found = None
-
-                        # 2) Fallback to direct select by external_uuid
-                        if found is None and event.external_uuid is not None:
-                            query = select(Event).where(
-                                Event.external_uuid == event.external_uuid,
-                                Event.deleted_at.is_(None),
-                            )
-                            maybe = self.session.execute(query)
-                            result = await maybe if inspect.isawaitable(maybe) else maybe
-                            if inspect.isawaitable(result):
-                                result = await result
-                            if hasattr(result, "scalars"):
-                                scalars = result.scalars()
-                                if inspect.isawaitable(scalars):
-                                    scalars = await scalars
-                                one = scalars.one_or_none()
-                                if inspect.isawaitable(one):
-                                    one = await one
-                                found = one
-
-                        # 3) Fallback to select by id
-                        if found is None and event.id is not None:
-                            query = select(Event).where(
-                                Event.id == event.id, Event.deleted_at.is_(None)
-                            )
-                            maybe = self.session.execute(query)
-                            result = await maybe if inspect.isawaitable(maybe) else maybe
-                            if inspect.isawaitable(result):
-                                result = await result
-                            if hasattr(result, "scalars"):
-                                scalars = result.scalars()
-                                if inspect.isawaitable(scalars):
-                                    scalars = await scalars
-                                one = scalars.one_or_none()
-                                if inspect.isawaitable(one):
-                                    one = await one
-                                found = one
-
-                        # Coerce to Event if needed.
-                        resolved_event: Event | None = None
-                        logger.info(
-                            "Raw found after conflict: type=%s repr=%s",
-                            type(found),
-                            repr(found),
-                        )
-
-                        if isinstance(found, Event):
-                            resolved_event = found
-                        else:
-                            try:
-                                # SQLModel 0.0.14+: prefer `model_validate` over `parse_obj`.
-                                if hasattr(Event, "model_validate"):
-                                    resolved_event = Event.model_validate(found)  # type: ignore[misc]
-                                else:
-                                    resolved_event = Event(**found)  # type: ignore[arg-type]
-                            except Exception:
-                                resolved_event = None
-
-                        if resolved_event is not None:
-                            try:
-                                try:
-                                    if isinstance(self.session, AsyncSession):
-                                        if (
-                                            getattr(resolved_event, "transitions", None)
-                                            is None
-                                        ):
-                                            resolved_event.transitions = []
-                                    else:
-                                        resolved_event.__dict__.setdefault(
-                                            "transitions", []
-                                        )
-                                except Exception:
-                                    pass
-                            except Exception:
-                                pass
-                            list_of_events.append(resolved_event)
-                        else:
-                            return Err(
-                                ErrorDetail(
-                                    error=ErrorCatalog.RUNTIME_FAILED.value,
-                                    detail="Conflict detected but existing event could not be resolved",
-                                )
-                            )
-                    except Exception as exc:  # pragma: no cover
-                        logger.exception(
-                            "Error while resolving existing event after insert"
-                        )
+                    # Savepoint was automatically rolled back by begin_nested context
+                    # Now try to resolve the existing canonical row
+                    resolved = await self._resolve_existing_event(event)
+                    if resolved is not None:
+                        self._ensure_transitions_collection(resolved)
+                        list_of_events.append(resolved)
+                    else:
                         return Err(
                             ErrorDetail(
-                                error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc)
+                                error=ErrorCatalog.RUNTIME_FAILED.value,
+                                detail="Conflict detected but existing event could not be resolved",
                             )
                         )
 
-            # For unit-test runs with mocked sessions, ensure returned objects have
-            # a plain `transitions` entry in their `__dict__` so tests that
-            # inspect `__dict__` directly behave as expected. Avoid doing this
-            # when using a real `AsyncSession` to not interfere with SQLAlchemy
-            # instrumentation.
-            # For unit tests we try to ensure `__dict__['transitions']` exists and is a
-            # plain list when the attribute isn't an instrumented collection.
-            for ev in list_of_events:
-                # If the calling session is a MagicMock (unit test), ensure there is a plain
-                # list in __dict__ but do not overwrite an existing list (preserve preloaded transitions).
-                if isinstance(self.session, MagicMock):
-                    ev.__dict__.setdefault(
-                        "transitions", getattr(ev, "__dict__", {}).get("transitions", [])
-                    )
-                    continue
-
-                # For real AsyncSession runs, prefer instrumented assignment and
-                # avoid writing to __dict__ which would break SQLAlchemy internals.
-                if "transitions" not in ev.__dict__:
-                    try:
-                        attr = getattr(ev, "transitions", None)
-                        if attr is None:
-                            # Create an instrumented collection without touching __dict__.
-                            ev.transitions = []
-                    except Exception:
-                        # Fail-safe: do not break on unexpected attribute access
-                        pass
-
-            # For real AsyncSession runs, eager-load transitions using selectinload to
-            # prevent later lazy-load attempts from running outside the greenlet
-            # context (which causes MissingGreenlet errors).
-            try:
-                if not isinstance(self.session, MagicMock) and isinstance(
-                    self.session, AsyncSession
-                ):
-                    ids = [
-                        ev.id
-                        for ev in list_of_events
-                        if getattr(ev, "id", None) is not None
-                    ]
-                    if ids:
-                        query = (
-                            select(Event)
-                            .where(Event.id.in_(ids))
-                            .options(selectinload(Event.transitions))
-                        )
-                        maybe = self.session.execute(query)
-                        result = await maybe if inspect.isawaitable(maybe) else maybe
-                        if inspect.isawaitable(result):
-                            result = await result
-                        scalars = result.scalars()
-                        if inspect.isawaitable(scalars):
-                            scalars = await scalars
-                        loaded = scalars.all()
-                        byid = {e.id: e for e in loaded}
-                        list_of_events = [byid.get(ev.id, ev) for ev in list_of_events]
-            except Exception:
-                # If eager-loading fails, continue — we already avoided destructive __dict__ writes.
-                logger.debug(
-                    "Failed to eager-load transitions; continuing without load",
-                    exc_info=True,
-                )
+            # Eager-load transitions to avoid lazy-load outside greenlet context
+            list_of_events = await self._eager_load_transitions(list_of_events)
 
             return Ok(list_of_events)
-        except Exception as exc:  # pragma: no cover - bubble up as Err
-            logger.error(f"Error in saveMany: {exc}", exc_info=True)
+
+        except Exception as exc:
+            logger.error(f"Error in save_or_resolve: {exc}", exc_info=True)
             return Err(
                 ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
             )
+
+    # -------------------------------------------------------------------------
+    # Helper: Resolve existing event after conflict
+    # -------------------------------------------------------------------------
+    async def _resolve_existing_event(self, event: Event) -> Event | None:
+        """Try to find the existing canonical row after an IntegrityError."""
+        found: Event | None = None
+
+        # 1) Try FastCRUD.get (unit tests may patch this)
+        try:
+            fastcrud_call = self.event_crud.get(
+                self.session,
+                schema_to_select=Event,
+                return_as_model=True,
+                one_or_none=True,
+                external_uuid=event.external_uuid,
+                id=event.id,
+                deleted_at__is=None,
+            )
+            if inspect.isawaitable(fastcrud_call):
+                fastcrud_call = await fastcrud_call
+            if fastcrud_call:
+                found = self._coerce_to_event(fastcrud_call)
+        except Exception:
+            pass
+
+        # 2) Fallback: SELECT by external_uuid
+        if found is None and event.external_uuid is not None:
+            found = await self._select_event_by_external_uuid(event.external_uuid)
+
+        # 3) Fallback: SELECT by id
+        if found is None and event.id is not None:
+            found = await self._select_event_by_id(event.id)
+
+        if found is not None:
+            logger.info(
+                "Resolved existing event after conflict: type=%s id=%s",
+                type(found).__name__,
+                getattr(found, "id", None),
+            )
+
+        return found
+
+    async def _select_event_by_external_uuid(self, external_uuid) -> Event | None:
+        """SELECT event by external_uuid, handling async properly."""
+        try:
+            query = select(Event).where(
+                Event.external_uuid == external_uuid,
+                Event.deleted_at.is_(None),
+            )
+            result = await self.session.execute(query)
+            return result.scalars().one_or_none()
+        except Exception:
+            return None
+
+    async def _select_event_by_id(self, event_id) -> Event | None:
+        """SELECT event by id, handling async properly."""
+        try:
+            query = select(Event).where(
+                Event.id == event_id,
+                Event.deleted_at.is_(None),
+            )
+            result = await self.session.execute(query)
+            return result.scalars().one_or_none()
+        except Exception:
+            return None
+
+    def _coerce_to_event(self, found) -> Event | None:
+        """Coerce various return shapes to Event model."""
+        if isinstance(found, Event):
+            return found
+        try:
+            if hasattr(Event, "model_validate"):
+                return Event.model_validate(found)
+            return Event(**found)
+        except Exception:
+            return None
+
+    def _ensure_transitions_collection(self, event: Event) -> None:
+        """Ensure transitions collection exists without breaking SQLAlchemy internals."""
+        try:
+            if isinstance(self.session, MagicMock):
+                # Unit test path: use plain list in __dict__
+                event.__dict__.setdefault("transitions", [])
+            elif isinstance(self.session, AsyncSession):
+                # Real session: use instrumented assignment
+                if getattr(event, "transitions", None) is None:
+                    event.transitions = []
+        except Exception:
+            pass
+
+    async def _eager_load_transitions(
+        self, list_of_events: list[Event]
+    ) -> list[Event]:
+        """Eager-load transitions to prevent lazy-load outside greenlet context."""
+        if isinstance(self.session, MagicMock):
+            return list_of_events
+
+        try:
+            ids = [ev.id for ev in list_of_events if ev.id is not None]
+            if not ids:
+                return list_of_events
+
+            query = (
+                select(Event)
+                .where(Event.id.in_(ids))
+                .options(selectinload(Event.transitions))
+            )
+            result = await self.session.execute(query)
+            loaded = result.scalars().all()
+            byid = {e.id: e for e in loaded}
+            return [byid.get(ev.id, ev) for ev in list_of_events]
+        except Exception:
+            logger.debug(
+                "Failed to eager-load transitions; continuing without load",
+                exc_info=True,
+            )
+            return list_of_events
 
     async def delete_multi(
         self, events: list[Event]

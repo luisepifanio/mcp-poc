@@ -31,7 +31,16 @@ class InMemorySpyRepo:
         return Ok(found)
 
     async def saveMany(self, events):
-        # emulate upsert by external_uuid
+        # Strict insert: just add to storage, no conflict resolution
+        list_of_events = []
+        for ev in events:
+            key = str(ev.external_uuid) if ev.external_uuid is not None else str(ev.id)
+            self.storage[key] = ev
+            list_of_events.append(ev)
+        return Ok(list_of_events)
+
+    async def save_or_resolve(self, events):
+        # Idempotent upsert by external_uuid with conflict resolution
         list_of_events = []
         for ev in events:
             key = str(ev.external_uuid) if ev.external_uuid is not None else str(ev.id)

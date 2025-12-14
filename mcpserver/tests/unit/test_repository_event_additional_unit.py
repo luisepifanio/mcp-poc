@@ -32,7 +32,8 @@ async def test_saveMany_success_sets_transitions_and_returns_events():
 
 
 @pytest.mark.asyncio
-async def test_saveMany_conflict_resolves_existing(mocker):
+async def test_save_or_resolve_conflict_resolves_existing(mocker):
+    """Test that save_or_resolve uses savepoints and resolves conflicts."""
     session = MagicMock(spec=AsyncSession)
 
     # flush will raise IntegrityError to trigger conflict branch
@@ -40,8 +41,13 @@ async def test_saveMany_conflict_resolves_existing(mocker):
         raise IntegrityError("stmt", {}, Exception("orig"))
 
     session.flush = AsyncMock(side_effect=_raise)
-    session.rollback = AsyncMock()
     session.add = MagicMock()
+
+    # Mock begin_nested to return an async context manager that raises on flush
+    nested_ctx = MagicMock()
+    nested_ctx.__aenter__ = AsyncMock(return_value=None)
+    nested_ctx.__aexit__ = AsyncMock(return_value=False)
+    session.begin_nested = MagicMock(return_value=nested_ctx)
 
     repo = AsyncSQLAlchemyEventRepository(session)
 
@@ -55,7 +61,7 @@ async def test_saveMany_conflict_resolves_existing(mocker):
         name="conflict", external_uuid=existing.external_uuid, state=EventState.CREATED
     )
 
-    res = await repo.saveMany([ev])
+    res = await repo.save_or_resolve([ev])
     assert isinstance(res, Ok)
     lst = res.unwrap()
     assert len(lst) == 1
@@ -63,15 +69,21 @@ async def test_saveMany_conflict_resolves_existing(mocker):
 
 
 @pytest.mark.asyncio
-async def test_saveMany_conflict_unresolved_returns_err(mocker):
+async def test_save_or_resolve_conflict_unresolved_returns_err(mocker):
+    """Test that save_or_resolve returns error when conflict cannot be resolved."""
     session = MagicMock(spec=AsyncSession)
 
     def _raise(*_args, **_kwargs):
         raise IntegrityError("stmt", {}, Exception("orig"))
 
     session.flush = AsyncMock(side_effect=_raise)
-    session.rollback = AsyncMock()
     session.add = MagicMock()
+
+    # Mock begin_nested to return an async context manager
+    nested_ctx = MagicMock()
+    nested_ctx.__aenter__ = AsyncMock(return_value=None)
+    nested_ctx.__aexit__ = AsyncMock(return_value=False)
+    session.begin_nested = MagicMock(return_value=nested_ctx)
 
     repo = AsyncSQLAlchemyEventRepository(session)
 
@@ -80,7 +92,7 @@ async def test_saveMany_conflict_unresolved_returns_err(mocker):
 
     ev = Event(name="conflict", external_uuid=uuid4(), state=EventState.CREATED)
 
-    res = await repo.saveMany([ev])
+    res = await repo.save_or_resolve([ev])
     assert isinstance(res, Err)
     err = res.unwrap_err()
     assert err.error == ErrorCatalog.RUNTIME_FAILED.value

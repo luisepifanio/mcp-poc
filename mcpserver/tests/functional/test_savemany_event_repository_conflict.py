@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio
-async def test_saveMany_does_not_update_on_conflict(dbsession: AsyncSession):
-    """Ensure that saveMany does not silently update an existing row on uniqueness conflict.
+async def test_save_or_resolve_does_not_update_on_conflict(dbsession: AsyncSession):
+    """Ensure that save_or_resolve does not silently update an existing row on uniqueness conflict.
 
     Steps:
     - Insert a canonical Event with a given external_uuid.
-    - Attempt to saveMany() a different Event instance with the same external_uuid
+    - Attempt to save_or_resolve() a different Event instance with the same external_uuid
       but different fields (name/state).
     - Assert the repository returned the canonical row and that the DB row's
       original fields were not modified.
@@ -34,7 +34,7 @@ async def test_saveMany_does_not_update_on_conflict(dbsession: AsyncSession):
     conflicting = Event(name="hacked-name", external_uuid=ext, state=EventState.COMPLETED)
 
     repo = AsyncSQLAlchemyEventRepository(dbsession)
-    result = await repo.saveMany([conflicting])
+    result = await repo.save_or_resolve([conflicting])
 
     assert isinstance(result, Ok)
     created = result.unwrap()

@@ -8,8 +8,8 @@ from app.infrastructure.db.repository_event import AsyncSQLAlchemyEventRepositor
 
 
 @pytest.mark.asyncio
-async def test_saveMany_does_not_overwrite_relationship_internals(async_session_local):
-    """Regression test: ensure saveMany does not overwrite relationship internals
+async def test_save_or_resolve_does_not_overwrite_relationship_internals(async_session_local):
+    """Regression test: ensure save_or_resolve does not overwrite relationship internals
     (no direct __dict__ assignment that would break SQLAlchemy instrumentation).
     """
     AsyncSessionLocal = async_session_local
@@ -45,7 +45,7 @@ async def test_saveMany_does_not_overwrite_relationship_internals(async_session_
             state=EventState.CREATED,
         )
 
-        res = await repo.saveMany([new_ev])
+        res = await repo.save_or_resolve([new_ev])
         assert isinstance(res, Ok)
         resolved_list = res.unwrap()
         assert len(resolved_list) == 1

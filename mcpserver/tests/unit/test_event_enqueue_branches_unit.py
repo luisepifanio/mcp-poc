@@ -27,6 +27,10 @@ class SimpleRepo:
     async def saveMany(self, events: list):
         return self._savemany_ret
 
+    async def save_or_resolve(self, events: list):
+        """Idempotent save - returns saved or existing events."""
+        return self._savemany_ret
+
     async def save(self, event):
         return await self.saveMany([event])
 

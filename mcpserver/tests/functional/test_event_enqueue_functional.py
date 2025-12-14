@@ -26,6 +26,11 @@ class SpyRepo:
         self.saved = events
         return Ok(events)
 
+    async def save_or_resolve(self, events):
+        # Idempotent insert: same behavior as saveMany for this simple spy
+        self.saved = events
+        return Ok(events)
+
     async def save(self, event):
         # emulate repository.save: persist and return single Event wrapped in Ok
         await self.saveMany([event])

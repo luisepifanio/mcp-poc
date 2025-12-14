@@ -8,9 +8,9 @@ from app.infrastructure.db.repository_event import AsyncSQLAlchemyEventRepositor
 
 
 @pytest.mark.asyncio
-async def test_saveMany_integration_conflict_resolution(async_session_local):
+async def test_save_or_resolve_integration_conflict_resolution(async_session_local):
     """Integration: persist an event, then attempt to save another with same external_uuid
-    and verify repository returns the canonical existing event on conflict.
+    and verify repository returns the canonical existing event on conflict using save_or_resolve.
     """
     AsyncSessionLocal = async_session_local
 
@@ -36,8 +36,8 @@ async def test_saveMany_integration_conflict_resolution(async_session_local):
             state=EventState.CREATED,
         )
 
-        # Attempt to save; should return the existing canonical event
-        res = await repo.saveMany([new_ev])
+        # Attempt to save_or_resolve; should return the existing canonical event
+        res = await repo.save_or_resolve([new_ev])
         assert isinstance(res, Ok)
         lst = res.unwrap()
         assert len(lst) == 1

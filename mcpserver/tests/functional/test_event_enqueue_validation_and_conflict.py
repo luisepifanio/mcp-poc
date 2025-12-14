@@ -37,6 +37,12 @@ class ConflictSpyRepo:
             )
         )
 
+    async def save_or_resolve(self, events):
+        # Idempotent: return existing event if conflict occurs
+        if self.existing is not None:
+            return Ok([self.existing])
+        return Ok(events)
+
     async def save(self, event):
         return await self.saveMany([event])
 
@@ -95,6 +101,11 @@ async def test_payload_normalization_before_save(mocker, uow_factory):
             return Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no"))
 
         async def saveMany(self, events):
+            self.saved = events
+            return Ok(events)
+
+        async def save_or_resolve(self, events):
+            # Idempotent: just save for this simple spy
             self.saved = events
             return Ok(events)
 
