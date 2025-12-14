@@ -8,33 +8,27 @@ from app.errors import ErrorCatalog
 
 
 @pytest.mark.asyncio
-async def test_asyncsqlalchemyeventrepo_getone_ok_and_not_found(async_session_local):
+async def test_asyncsqlalchemyeventrepo_getone_ok_and_not_found(uow_factory):
     """Integration test: persist an Event via the real repository and verify getOne behavior."""
-    # Use the shared session factory from fixture
-    AsyncSessionLocal = async_session_local
+    # Use the provided uow_factory to obtain a UnitOfWork instance
+    async with uow_factory() as uow:
+        repo = uow.events
 
-    # Use a fresh async session and the real UnitOfWork which instantiates the real repo
-    async with AsyncSessionLocal() as session:
-        from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
+        # Create and save a new Event
+        ev = Event(name="integration-getone", external_uuid=uuid4(), payload={"a": 1})
+        saved_res = await repo.save(ev)
+        assert isinstance(saved_res, Ok)
+        saved = saved_res.unwrap()
+        assert saved.id is not None
 
-        async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
-            repo = uow.events
+        # Fetch by id -> Ok
+        fetched_res = await repo.getOne(saved.id)
+        assert isinstance(fetched_res, Ok)
+        fetched = fetched_res.unwrap()
+        assert fetched.id == saved.id
+        assert fetched.external_uuid == saved.external_uuid
 
-            # Create and save a new Event
-            ev = Event(name="integration-getone", external_uuid=uuid4(), payload={"a": 1})
-            saved_res = await repo.save(ev)
-            assert isinstance(saved_res, Ok)
-            saved = saved_res.unwrap()
-            assert saved.id is not None
-
-            # Fetch by id -> Ok
-            fetched_res = await repo.getOne(saved.id)
-            assert isinstance(fetched_res, Ok)
-            fetched = fetched_res.unwrap()
-            assert fetched.id == saved.id
-            assert fetched.external_uuid == saved.external_uuid
-
-            # Fetch by random id -> Not Found
-            missing_res = await repo.getOne(uuid4())
-            assert isinstance(missing_res, Err)
-            assert missing_res.unwrap_err().error == ErrorCatalog.NOT_FOUND.value
+        # Fetch by random id -> Not Found
+        missing_res = await repo.getOne(uuid4())
+        assert isinstance(missing_res, Err)
+        assert missing_res.unwrap_err().error == ErrorCatalog.NOT_FOUND.value

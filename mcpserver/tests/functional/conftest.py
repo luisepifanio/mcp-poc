@@ -97,6 +97,43 @@ async def async_session_local():
 
 
 @pytest_asyncio.fixture(scope="function")
+async def uow_factory(async_session_local):
+    """Provide a small async contextmanager factory for `UnitOfWork` instances.
+
+    Usage in tests:
+
+        async with uow_factory() as uow:
+            # use uow
+
+    Or, to bind a specific session (e.g. when coordinating multiple actions
+    within the same DB session):
+
+        async with AsyncSessionLocal() as session:
+            async with uow_factory(session) as uow:
+                # use uow bound to `session`
+
+    This helper reduces boilerplate in tests and centralizes construction
+    of `AsyncSQLAlchwemyUnitOfWork`.
+    """
+    from contextlib import asynccontextmanager
+    from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
+
+    AsyncSessionLocal = async_session_local
+
+    @asynccontextmanager
+    async def _uow(session=None):
+        if session is None:
+            async with AsyncSessionLocal() as session:
+                async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
+                    yield uow
+        else:
+            async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
+                yield uow
+
+    return _uow
+
+
+@pytest_asyncio.fixture(scope="function")
 async def dbsession() -> AsyncGenerator[AsyncSession, None]:
     """Provide a fresh `AsyncSession` for each test function.
 

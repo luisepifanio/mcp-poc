@@ -33,7 +33,7 @@ class SpyRepo:
 
 
 @pytest.mark.asyncio
-async def test_enqueue_with_real_uow_patches_repo(mocker):
+async def test_enqueue_with_real_uow_patches_repo(mocker, uow_factory):
     # Prepare a fake AsyncSession similar to other tests
     session = MagicMock()
     session.commit = AsyncMock()
@@ -50,10 +50,7 @@ async def test_enqueue_with_real_uow_patches_repo(mocker):
         return_value=spy,
     )
 
-    # Import here to avoid import-time side effects
-    from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
-
-    async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
+    async with uow_factory(session) as uow:
         uc = EnqueueEventUseCase(uow)
         inp = EventUseCaseInput(
             name="functional-test", external_uuid=None, payload={"functional": True}

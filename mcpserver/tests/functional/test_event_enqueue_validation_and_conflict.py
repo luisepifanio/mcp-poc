@@ -42,7 +42,7 @@ class ConflictSpyRepo:
 
 
 @pytest.mark.asyncio
-async def test_enqueue_rejects_invalid_initial_state(mocker):
+async def test_enqueue_rejects_invalid_initial_state(mocker, uow_factory):
     from unittest.mock import AsyncMock, MagicMock
 
     session = MagicMock()
@@ -52,14 +52,11 @@ async def test_enqueue_rejects_invalid_initial_state(mocker):
     session.close = AsyncMock()
     session.rollback = AsyncMock()
 
-    from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
-
     mocker.patch(
         "app.infrastructure.db.unit_of_work.AsyncSQLAlchemyEventRepository",
         return_value=ConflictSpyRepo(None),
     )
-
-    async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
+    async with uow_factory(session) as uow:
         uc = EnqueueEventUseCase(uow)
         inp = EventUseCaseInput(
             name="badstate",
@@ -73,7 +70,7 @@ async def test_enqueue_rejects_invalid_initial_state(mocker):
 
 
 @pytest.mark.asyncio
-async def test_payload_normalization_before_save(mocker):
+async def test_payload_normalization_before_save(mocker, uow_factory):
     from unittest.mock import AsyncMock, MagicMock
 
     session = MagicMock()
@@ -112,11 +109,8 @@ async def test_payload_normalization_before_save(mocker):
         "app.infrastructure.db.unit_of_work.AsyncSQLAlchemyEventRepository",
         return_value=spy,
     )
-
-    from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
-
     external = uuid4()
-    async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
+    async with uow_factory(session) as uow:
         uc = EnqueueEventUseCase(uow)
         payload = {"b": 1, "a": 2}
         inp = EventUseCaseInput(name="normalize", external_uuid=external, payload=payload)
@@ -130,7 +124,7 @@ async def test_payload_normalization_before_save(mocker):
 
 
 @pytest.mark.asyncio
-async def test_integrity_conflict_returns_existing(mocker):
+async def test_integrity_conflict_returns_existing(mocker, uow_factory):
     from unittest.mock import AsyncMock, MagicMock
 
     session = MagicMock()
@@ -152,9 +146,7 @@ async def test_integrity_conflict_returns_existing(mocker):
         return_value=conflict_repo,
     )
 
-    from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
-
-    async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
+    async with uow_factory(session) as uow:
         uc = EnqueueEventUseCase(uow)
         inp = EventUseCaseInput(
             name="new-one", external_uuid=existing.external_uuid, payload={}
