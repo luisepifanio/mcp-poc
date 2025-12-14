@@ -96,8 +96,15 @@ async def async_session_local():
     return await get_session_local()
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def dbsession() -> AsyncGenerator[AsyncSession, None]:
+    """Provide a fresh `AsyncSession` for each test function.
+
+    Previous implementation produced a session-scoped `dbsession`, which could
+    leak transactional state across tests. Creating a new session per test
+    reduces flakiness and matches other fixtures that expect independent
+    sessions.
+    """
     from app.infrastructure.db.connection import get_session_local
 
     AsyncSessionLocal = await get_session_local()
