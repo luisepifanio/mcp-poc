@@ -172,8 +172,6 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                                 # SQLModel 0.0.14+: prefer `model_validate` over `parse_obj`.
                                 if hasattr(Event, "model_validate"):
                                     resolved_event = Event.model_validate(found)  # type: ignore[misc]
-                                elif hasattr(Event, "parse_obj"):
-                                    resolved_event = Event.parse_obj(found)  # type: ignore[misc]
                                 else:
                                     resolved_event = Event(**found)  # type: ignore[arg-type]
                             except Exception:

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     # Load the ML model
     from app.infrastructure.db.connection import setup_database_models
 

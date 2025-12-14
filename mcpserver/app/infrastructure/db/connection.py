@@ -52,7 +52,7 @@ except Exception:  # pragma: no cover - fallback type
 def receive_connect(
     dbapi_connection: sqlite3.Connection
     | Any,  # raw DB-API connection (sqlite3.Connection in local)
-    connection_record: _ConnectionRecord | Any,
+    _connection_record: _ConnectionRecord | Any,
 ) -> None:
     """
     Sets the SQLite journal mode to WAL for new connections.

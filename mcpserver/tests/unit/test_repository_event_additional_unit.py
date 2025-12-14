@@ -36,7 +36,7 @@ async def test_saveMany_conflict_resolves_existing(mocker):
     session = MagicMock(spec=AsyncSession)
 
     # flush will raise IntegrityError to trigger conflict branch
-    def _raise(*args, **kwargs):
+    def _raise(*_args, **_kwargs):
         raise IntegrityError("stmt", {}, Exception("orig"))
 
     session.flush = AsyncMock(side_effect=_raise)
@@ -66,7 +66,7 @@ async def test_saveMany_conflict_resolves_existing(mocker):
 async def test_saveMany_conflict_unresolved_returns_err(mocker):
     session = MagicMock(spec=AsyncSession)
 
-    def _raise(*args, **kwargs):
+    def _raise(*_args, **_kwargs):
         raise IntegrityError("stmt", {}, Exception("orig"))
 
     session.flush = AsyncMock(side_effect=_raise)

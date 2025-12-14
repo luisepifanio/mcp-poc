@@ -3,8 +3,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
-
 
 @pytest.mark.asyncio
 async def test_unit_of_work_commit_and_close(mocker, uow_factory):

@@ -2,17 +2,16 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-from result import Err, Ok
+from result import Ok
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.entities import Event, EventState, EventTransition
-from app.errors import ErrorCatalog, ErrorDetail
 from app.infrastructure.db.repository_event import AsyncSQLAlchemyEventRepository
 
 
 @pytest.mark.asyncio
-async def test_saveMany_with_preloaded_transitions(mocker):
+async def test_saveMany_with_preloaded_transitions(_mocker):
     session = MagicMock(spec=AsyncSession)
     session.flush = AsyncMock()
     session.add = MagicMock()
@@ -40,13 +39,13 @@ async def test_saveMany_with_preloaded_transitions(mocker):
 async def test_saveMany_integrity_rollback_raises_but_resolution_continues(mocker):
     session = MagicMock(spec=AsyncSession)
 
-    def _raise(*args, **kwargs):
+    def _raise(*_args, **_kwargs):
         raise IntegrityError("stmt", {}, Exception("orig"))
 
     # flush raises IntegrityError, rollback raises Exception to hit inner except
     session.flush = AsyncMock(side_effect=_raise)
 
-    def _rb_raise(*args, **kwargs):
+    def _rb_raise(*_args, **_kwargs):
         raise RuntimeError("rollback failed")
 
     session.rollback = MagicMock(side_effect=_rb_raise)
@@ -70,7 +69,7 @@ async def test_saveMany_integrity_rollback_raises_but_resolution_continues(mocke
 async def test_saveMany_conflict_uses_id_lookup_when_no_external_uuid(mocker):
     session = MagicMock(spec=AsyncSession)
 
-    def _raise(*args, **kwargs):
+    def _raise(*_args, **_kwargs):
         raise IntegrityError("stmt", {}, Exception("orig"))
 
     session.flush = AsyncMock(side_effect=_raise)
@@ -82,10 +81,10 @@ async def test_saveMany_conflict_uses_id_lookup_when_no_external_uuid(mocker):
     existing = Event(name="existing", external_uuid=None, state=EventState.PENDING)
 
     # patch FastCRUD.get to return None for external_uuid lookup then existing for id lookup
-    def fake_get(session_arg, **kwargs):
-        if kwargs.get("external_uuid") is not None:
+    def fake_get(_session_arg, **_kwargs):
+        if _kwargs.get("external_uuid") is not None:
             return None
-        if kwargs.get("id") is not None:
+        if _kwargs.get("id") is not None:
             return existing
         return None
 
