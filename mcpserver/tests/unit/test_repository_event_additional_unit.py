@@ -13,7 +13,9 @@ from app.infrastructure.db.repository_event import AsyncSQLAlchemyEventRepositor
 
 @pytest.mark.asyncio
 async def test_saveMany_success_sets_transitions_and_returns_events():
-    session = MagicMock(spec=AsyncSession)
+    # Use MagicMock WITHOUT spec=AsyncSession so isinstance(session, AsyncSession)
+    # returns False and the code uses the fallback path for non-real sessions
+    session = MagicMock()
     session.flush = AsyncMock()
     session.add = MagicMock()
 

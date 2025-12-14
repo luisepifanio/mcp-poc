@@ -13,7 +13,24 @@ Notas:
 
 Esto ejecuta las pruebas unitarias y funcionales configuradas para el proyecto.
 
-Testing tips (caché de settings)
+---
+
+## ⚠️ Regla de Separación: Código de Producción vs Testing
+
+**Regla Crítica**: El paquete `app/` **NO debe tener dependencias** con paquetes de testing (`unittest.mock`, `pytest`, `pytest-mock`, etc.) definidos en `dependency-groups -> dev` del `pyproject.toml`.
+
+El código en `app/` es el que se containeriza y despliega en producción. Las dependencias de testing no deben estar presentes en runtime.
+
+**Alternativas para distinguir comportamiento en tests**:
+- **Duck typing**: `isinstance(obj, RealClass)` en lugar de `isinstance(obj, MagicMock)`
+- **Inyección de dependencias**: Pasar comportamientos como parámetros
+- **Interfaces/Protocolos**: Definir contratos que implementaciones reales y mocks cumplan
+
+Ver [Agents.md](Agents.md) para más detalles y ejemplos.
+
+---
+
+## Testing tips (caché de settings)
 
 - Si un test necesita modificar variables de entorno (p. ej. `DATABASE_URL`), es importante asegurarse de que la caché de configuración se limpie después del test para evitar contaminación entre pruebas.
 - Uso recomendado: llamar a `clearAppSettings()` en el teardown del test o usar `getAppSettings(reload=True)` al obtener la configuración.

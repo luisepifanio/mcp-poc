@@ -150,6 +150,42 @@ mcpserver/
 - **Docstrings**: Documentar clases públicas y métodos complejos
 - **Error Handling**: Usar `result` library para manejo funcional de errores en use cases
 
+#### ⚠️ Separación Estricta: Código de Producción vs Testing
+
+**Regla Crítica**: El paquete `app/` **NO debe tener dependencias** con paquetes de testing o aseguramiento de calidad definidos en `dependency-groups -> dev` del `pyproject.toml`.
+
+**Razón**: El código en `app/` es el que se containeriza y despliega en producción. Las dependencias de testing (`pytest`, `unittest.mock`, `pytest-mock`, etc.) no deben estar presentes en runtime.
+
+**Prohibido en `app/`**:
+```python
+# ❌ INCORRECTO - No importar en código de producción
+from unittest.mock import MagicMock, AsyncMock, patch
+import pytest
+from pytest_mock import MockerFixture
+```
+
+**Alternativas correctas**:
+- **Duck typing**: En lugar de `isinstance(obj, MagicMock)`, usar `isinstance(obj, RealClass)` o verificar atributos
+- **Inyección de dependencias**: Pasar comportamientos como parámetros en lugar de detectar mocks
+- **Interfaces/Protocolos**: Definir contratos que tanto implementaciones reales como mocks cumplan
+
+**Ejemplo de refactorización**:
+```python
+# ❌ INCORRECTO
+from unittest.mock import MagicMock
+if isinstance(self.session, MagicMock):
+    # código para tests
+else:
+    # código real
+
+# ✅ CORRECTO  
+from sqlalchemy.ext.asyncio import AsyncSession
+if isinstance(self.session, AsyncSession):
+    # código real
+else:
+    # fallback para cualquier otro tipo (mocks incluidos)
+```
+
 #### Linting y Formatting
 
 Este proyecto usa **Ruff** como linter y formatter unificado:

@@ -1,8 +1,6 @@
-import inspect
 import logging
 from collections.abc import Iterable
 from typing import TypedDict, cast
-from unittest.mock import MagicMock
 from uuid import UUID
 
 from fastcrud import FastCRUD
@@ -32,7 +30,7 @@ class GetMultiTypedDict(TypedDict, total=False):
 
 class AsyncSQLAlchemyEventRepository(EventRepository):
     def __init__(self, session: AsyncSession):
-        self.session = session
+        self.session: AsyncSession = session
         self.event_crud = FastCRUD(Event)
         self.transition_crud = FastCRUD(EventTransition)
 
@@ -130,9 +128,9 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         """Try to find the existing canonical row after an IntegrityError."""
         found: Event | None = None
 
-        # 1) Try FastCRUD.get (unit tests may patch this)
+        # 1) Try FastCRUD.get
         try:
-            fastcrud_call = self.event_crud.get(
+            fastcrud_result = await self.event_crud.get(
                 self.session,
                 schema_to_select=Event,
                 return_as_model=True,
@@ -141,10 +139,8 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                 id=event.id,
                 deleted_at__is=None,
             )
-            if inspect.isawaitable(fastcrud_call):
-                fastcrud_call = await fastcrud_call
-            if fastcrud_call:
-                found = self._coerce_to_event(fastcrud_call)
+            if fastcrud_result:
+                found = self._coerce_to_event(fastcrud_result)
         except Exception:
             pass
 
@@ -203,21 +199,20 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
     def _ensure_transitions_collection(self, event: Event) -> None:
         """Ensure transitions collection exists without breaking SQLAlchemy internals."""
         try:
-            if isinstance(self.session, MagicMock):
-                # Unit test path: use plain list in __dict__
-                event.__dict__.setdefault("transitions", [])
-            elif isinstance(self.session, AsyncSession):
+            if isinstance(self.session, AsyncSession):
                 # Real session: use instrumented assignment
                 if getattr(event, "transitions", None) is None:
                     event.transitions = []
+            else:
+                # Non-real session (mocks, stubs): use plain list in __dict__
+                event.__dict__.setdefault("transitions", [])
         except Exception:
             pass
 
-    async def _eager_load_transitions(
-        self, list_of_events: list[Event]
-    ) -> list[Event]:
+    async def _eager_load_transitions(self, list_of_events: list[Event]) -> list[Event]:
         """Eager-load transitions to prevent lazy-load outside greenlet context."""
-        if isinstance(self.session, MagicMock):
+        if not isinstance(self.session, AsyncSession):
+            # Non-real session (mocks, stubs): skip eager loading
             return list_of_events
 
         try:
