@@ -55,7 +55,7 @@ class InMemorySpyRepo:
 
 
 @pytest.mark.asyncio
-async def test_enqueue_idempotent_by_external_uuid(mocker):
+async def test_enqueue_idempotent_by_external_uuid(mocker, uow_factory):
     # prepare session-like object
     from unittest.mock import AsyncMock, MagicMock
 
@@ -74,12 +74,9 @@ async def test_enqueue_idempotent_by_external_uuid(mocker):
         return_value=spy,
     )
 
-    # import unit of work implementation
-    from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
-
     external = uuid4()
 
-    async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
+    async with uow_factory(session) as uow:
         uc = EnqueueEventUseCase(uow)
         inp = EventUseCaseInput(
             name="idemp-test", external_uuid=external, payload={"k": "v"}
