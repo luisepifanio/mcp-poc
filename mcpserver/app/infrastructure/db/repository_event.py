@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 class DeleteTypedDict(TypedDict):  # All keys are optional by default
-    deleted: list
-    not_found: list
+    deleted: list[UUID]
+    not_found: list[UUID]
     total_deleted: int
     total_not_found: int
 
@@ -66,6 +66,17 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
                     list_of_events.append(event)
                 except IntegrityError:
+                    # uniqueness constraint violated; the session's transaction is
+                    # marked for rollback. Roll back the current transaction so
+                    # we can safely execute subsequent SELECTs using this
+                    # session (some DB drivers require the rollback before new
+                    # statements can be run).
+                    try:
+                        await self.session.rollback()
+                    except Exception:
+                        # best-effort rollback; continue to attempt resolution
+                        logger.debug("Rollback after IntegrityError failed or was unnecessary", exc_info=True)
+
                     # uniqueness constraint violated; attempt to fetch existing row
                     try:
                         found = None

@@ -1,4 +1,6 @@
+import sqlite3
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
@@ -38,8 +40,20 @@ async def get_session_local() -> async_sessionmaker[AsyncSession]:
     return AsyncSessionLocal
 
 
+try:
+    from sqlalchemy.pool import _ConnectionRecord  # type: ignore
+except Exception:  # pragma: no cover - fallback type
+
+    class _ConnectionRecord:  # type: ignore
+        pass
+
+
 @event.listens_for(Engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
+def receive_connect(
+    dbapi_connection: sqlite3.Connection
+    | Any,  # raw DB-API connection (sqlite3.Connection in local)
+    connection_record: _ConnectionRecord | Any,
+) -> None:
     """
     Sets the SQLite journal mode to WAL for new connections.
     """

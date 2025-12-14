@@ -3,7 +3,7 @@ import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-def resolve_env_file():
+def resolve_env_file() -> str | None:
     env_value = os.getenv("ENV", "").lower()
     if env_value in ("development", "dev", "local"):
         return "local.env"

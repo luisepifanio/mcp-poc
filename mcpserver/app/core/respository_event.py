@@ -33,19 +33,36 @@ class EventRepository(ABC):
             Result[Event, ErrorDetail]: The result of the get operation.
             An event instance if found, or an ErrorDetail if not found or an error occurs.
         """
+        # Call getMany and propagate Err if it failed
         result: Result[list[Event], ErrorDetail] = await self.getMany([id])
         match result:
             case Err(e):
                 return Err(e)
+        # Explicitly type the unpacked result for linters/readers
+        list_of_events: list[Event] = result.unwrap()
 
-        list_of_events = result.unwrap()
-        if len(list_of_events) != 1:
+        # Behavior contract (explicit):
+        # - If no events -> return Err(NOT_FOUND) with detail "Event with id {id} not found."
+        # - If exactly one -> return Ok(event)
+        # - If more than one -> return Err(VALIDATION_FAILED) with detail
+        #   "Found {n} events for id {id}, please check schema definition."
+
+        if len(list_of_events) == 0:
+            return Err(
+                ErrorDetail(
+                    error=ErrorCatalog.NOT_FOUND.value,
+                    detail=f"Event with id {id} not found.",
+                )
+            )
+
+        if len(list_of_events) > 1:
             return Err(
                 ErrorDetail(
                     error=ErrorCatalog.VALIDATION_FAILED.value,
                     detail=f"Found {len(list_of_events)} events for id {id}, please check schema definition.",
                 )
             )
+
         return Ok(list_of_events[0])
 
     @abstractmethod

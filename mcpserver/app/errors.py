@@ -2,6 +2,8 @@ import enum
 
 from pydantic import BaseModel
 
+from .core.entities import JSONDict
+
 
 class ErrorCatalog(str, enum.Enum):
     GENERIC_FAIL = "GENERIC_FAIL"
@@ -15,7 +17,7 @@ class ErrorCatalog(str, enum.Enum):
 class ErrorDetail(BaseModel):
     error: str
     detail: str
-    metadata: dict | None = None
+    metadata: JSONDict | None = None
 
 
 class ErrorDetailBuilder:

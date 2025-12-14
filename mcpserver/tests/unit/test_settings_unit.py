@@ -1,5 +1,3 @@
-
-
 from app.core import settings as settings_mod
 
 
