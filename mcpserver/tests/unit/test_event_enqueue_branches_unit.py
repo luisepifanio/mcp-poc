@@ -4,7 +4,11 @@ import pytest
 from result import Err, Ok
 
 from app.core.entities import Event, EventState
-from app.core.usecases.event_usecases import EnqueueEventUseCase, EventUseCaseInput, transition_event
+from app.core.usecases.event_usecases import (
+    EnqueueEventUseCase,
+    EventUseCaseInput,
+    transition_event,
+)
 from app.errors import ErrorCatalog, ErrorDetail
 
 
@@ -41,8 +45,10 @@ class SimpleUoW:
 @pytest.mark.asyncio
 async def test_execute_returns_validation_err_for_malformed_input():
     # Pass a plain dict instead of EventUseCaseInput to trigger RootModel validation
-    repo = SimpleRepo(Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
-                      Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")))
+    repo = SimpleRepo(
+        Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
+        Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
+    )
     uow = SimpleUoW(repo)
     uc = EnqueueEventUseCase(uow)
 
@@ -57,9 +63,11 @@ async def test_execute_returns_validation_err_for_malformed_input():
 async def test_execute_propagates_save_runtime_error():
     # Save returns a runtime Err -> use case should propagate it
     err = ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail="db down")
-    repo = SimpleRepo(Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
-                      Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
-                      savemany_ret=Err(err))
+    repo = SimpleRepo(
+        Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
+        Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
+        savemany_ret=Err(err),
+    )
     uow = SimpleUoW(repo)
     uc = EnqueueEventUseCase(uow)
 
@@ -75,9 +83,11 @@ async def test_execute_handles_save_returning_multiple_events_as_error():
     # If repository returns multiple events for single save -> runtime error
     ev1 = Event(name="a", external_uuid=uuid4(), state=EventState.PENDING)
     ev2 = Event(name="b", external_uuid=uuid4(), state=EventState.PENDING)
-    repo = SimpleRepo(Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
-                      Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
-                      savemany_ret=Ok([ev1, ev2]))
+    repo = SimpleRepo(
+        Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
+        Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
+        savemany_ret=Ok([ev1, ev2]),
+    )
     uow = SimpleUoW(repo)
     uc = EnqueueEventUseCase(uow)
 
@@ -99,8 +109,10 @@ def test_transition_event_invalid():
 @pytest.mark.asyncio
 async def test_getone_err_non_not_found_returns_runtime_failed_case():
     # get_by_external_uuid not found, but getOne returns Err with a non-NOT_FOUND error
-    repo = SimpleRepo(Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
-                      Err(ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail="weird")))
+    repo = SimpleRepo(
+        Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no")),
+        Err(ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail="weird")),
+    )
     uow = SimpleUoW(repo)
     uc = EnqueueEventUseCase(uow)
 

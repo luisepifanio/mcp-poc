@@ -1,14 +1,12 @@
-from uuid import uuid4
-
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from result import Err, Ok
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.entities import Event, EventTransition, EventState
+from app.core.entities import Event, EventState, EventTransition
 from app.errors import ErrorCatalog, ErrorDetail
 from app.infrastructure.db.repository_event import AsyncSQLAlchemyEventRepository
 
@@ -23,7 +21,9 @@ async def test_saveMany_with_preloaded_transitions(mocker):
 
     ev = Event(name="with-trans", external_uuid=uuid4(), state=EventState.CREATED)
     # create a preloaded transition and attach directly to __dict__ to avoid lazy-loading
-    t = EventTransition(from_state=EventState.CREATED, to_state=EventState.PENDING, event_id=ev.id)
+    t = EventTransition(
+        from_state=EventState.CREATED, to_state=EventState.PENDING, event_id=ev.id
+    )
     ev.__dict__["transitions"] = [t]
 
     res = await repo.saveMany([ev])
@@ -45,8 +45,10 @@ async def test_saveMany_integrity_rollback_raises_but_resolution_continues(mocke
 
     # flush raises IntegrityError, rollback raises Exception to hit inner except
     session.flush = AsyncMock(side_effect=_raise)
+
     def _rb_raise(*args, **kwargs):
         raise RuntimeError("rollback failed")
+
     session.rollback = MagicMock(side_effect=_rb_raise)
     session.add = MagicMock()
 
@@ -55,7 +57,9 @@ async def test_saveMany_integrity_rollback_raises_but_resolution_continues(mocke
     existing = Event(name="existing", external_uuid=uuid4(), state=EventState.PENDING)
     mocker.patch("fastcrud.FastCRUD.get", return_value=existing)
 
-    ev = Event(name="conflict", external_uuid=existing.external_uuid, state=EventState.CREATED)
+    ev = Event(
+        name="conflict", external_uuid=existing.external_uuid, state=EventState.CREATED
+    )
 
     res = await repo.saveMany([ev])
     assert isinstance(res, Ok)
@@ -65,6 +69,7 @@ async def test_saveMany_integrity_rollback_raises_but_resolution_continues(mocke
 @pytest.mark.asyncio
 async def test_saveMany_conflict_uses_id_lookup_when_no_external_uuid(mocker):
     session = MagicMock(spec=AsyncSession)
+
     def _raise(*args, **kwargs):
         raise IntegrityError("stmt", {}, Exception("orig"))
 
@@ -75,6 +80,7 @@ async def test_saveMany_conflict_uses_id_lookup_when_no_external_uuid(mocker):
     repo = AsyncSQLAlchemyEventRepository(session)
 
     existing = Event(name="existing", external_uuid=None, state=EventState.PENDING)
+
     # patch FastCRUD.get to return None for external_uuid lookup then existing for id lookup
     def fake_get(session_arg, **kwargs):
         if kwargs.get("external_uuid") is not None:

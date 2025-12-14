@@ -3,8 +3,8 @@ from uuid import uuid4
 import pytest
 from result import Err, Ok
 
-from app.core.respository_event import EventRepository
 from app.core.entities import Event
+from app.core.respository_event import EventRepository
 from app.errors import ErrorCatalog, ErrorDetail
 
 

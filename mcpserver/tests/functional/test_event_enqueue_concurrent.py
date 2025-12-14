@@ -17,13 +17,14 @@ async def test_enqueue_concurrent_idempotency(uow_factory):
     - Only one event is ultimately persisted for that external_uuid
     """
 
-
     external = uuid4()
 
     async def run_in_session():
         async with uow_factory() as uow:
             uc = EnqueueEventUseCase(uow)
-            inp = EventUseCaseInput(name="concurrent-test", external_uuid=external, payload={"x": 1})
+            inp = EventUseCaseInput(
+                name="concurrent-test", external_uuid=external, payload={"x": 1}
+            )
             return await uc.execute(inp)
 
     # Run two coroutines concurrently, each with its own DB session

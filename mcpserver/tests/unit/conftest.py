@@ -1,5 +1,6 @@
-import pytest
 from contextlib import asynccontextmanager
+
+import pytest
 
 
 @pytest.fixture

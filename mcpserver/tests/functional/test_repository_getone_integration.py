@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 import pytest
-from result import Ok, Err
+from result import Err, Ok
 
 from app.core.entities import Event
 from app.errors import ErrorCatalog

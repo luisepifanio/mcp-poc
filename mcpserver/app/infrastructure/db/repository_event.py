@@ -1,17 +1,17 @@
 import inspect
 import logging
-from unittest.mock import MagicMock
 from collections.abc import Iterable
 from typing import TypedDict, cast
+from unittest.mock import MagicMock
 from uuid import UUID
 
 from fastcrud import FastCRUD
 from result import Err, Ok, Result
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlmodel import select
 
 from app.core.entities import Event, EventTransition
-from sqlmodel import select
-from sqlalchemy.orm import selectinload
 from app.core.respository_event import EventRepository
 from app.errors import ErrorCatalog, ErrorDetail
 
@@ -61,7 +61,9 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                     # prior to persistence, ensure they are attached without
                     # overwriting SQLAlchemy instrumentation.
                     try:
-                        transitions_attr = getattr(event, "__dict__", {}).get("transitions", None)
+                        transitions_attr = getattr(event, "__dict__", {}).get(
+                            "transitions", None
+                        )
                         if transitions_attr:
                             for transition in transitions_attr:
                                 transition.event_id = event.id
@@ -91,7 +93,10 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                     try:
                         await self.session.rollback()
                     except Exception:
-                        logger.debug("Rollback after IntegrityError failed or was unnecessary", exc_info=True)
+                        logger.debug(
+                            "Rollback after IntegrityError failed or was unnecessary",
+                            exc_info=True,
+                        )
 
                     # Try to resolve the existing canonical row.
                     try:
@@ -136,7 +141,9 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
                         # 3) Fallback to select by id
                         if found is None and event.id is not None:
-                            query = select(Event).where(Event.id == event.id, Event.deleted_at.is_(None))
+                            query = select(Event).where(
+                                Event.id == event.id, Event.deleted_at.is_(None)
+                            )
                             maybe = self.session.execute(query)
                             result = await maybe if inspect.isawaitable(maybe) else maybe
                             if inspect.isawaitable(result):
@@ -152,7 +159,11 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
                         # Coerce to Event if needed.
                         resolved_event: Event | None = None
-                        logger.info("Raw found after conflict: type=%s repr=%s", type(found), repr(found))
+                        logger.info(
+                            "Raw found after conflict: type=%s repr=%s",
+                            type(found),
+                            repr(found),
+                        )
 
                         if isinstance(found, Event):
                             resolved_event = found
@@ -172,10 +183,15 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                             try:
                                 try:
                                     if isinstance(self.session, AsyncSession):
-                                        if getattr(resolved_event, "transitions", None) is None:
+                                        if (
+                                            getattr(resolved_event, "transitions", None)
+                                            is None
+                                        ):
                                             resolved_event.transitions = []
                                     else:
-                                        resolved_event.__dict__.setdefault("transitions", [])
+                                        resolved_event.__dict__.setdefault(
+                                            "transitions", []
+                                        )
                                 except Exception:
                                     pass
                             except Exception:
@@ -189,8 +205,14 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                                 )
                             )
                     except Exception as exc:  # pragma: no cover
-                        logger.exception("Error while resolving existing event after insert")
-                        return Err(ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc)))
+                        logger.exception(
+                            "Error while resolving existing event after insert"
+                        )
+                        return Err(
+                            ErrorDetail(
+                                error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc)
+                            )
+                        )
 
             # For unit-test runs with mocked sessions, ensure returned objects have
             # a plain `transitions` entry in their `__dict__` so tests that
@@ -203,7 +225,9 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                 # If the calling session is a MagicMock (unit test), ensure there is a plain
                 # list in __dict__ but do not overwrite an existing list (preserve preloaded transitions).
                 if isinstance(self.session, MagicMock):
-                    ev.__dict__.setdefault("transitions", getattr(ev, "__dict__", {}).get("transitions", []))
+                    ev.__dict__.setdefault(
+                        "transitions", getattr(ev, "__dict__", {}).get("transitions", [])
+                    )
                     continue
 
                 # For real AsyncSession runs, prefer instrumented assignment and
@@ -222,10 +246,20 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             # prevent later lazy-load attempts from running outside the greenlet
             # context (which causes MissingGreenlet errors).
             try:
-                if not isinstance(self.session, MagicMock) and isinstance(self.session, AsyncSession):
-                    ids = [ev.id for ev in list_of_events if getattr(ev, "id", None) is not None]
+                if not isinstance(self.session, MagicMock) and isinstance(
+                    self.session, AsyncSession
+                ):
+                    ids = [
+                        ev.id
+                        for ev in list_of_events
+                        if getattr(ev, "id", None) is not None
+                    ]
                     if ids:
-                        query = select(Event).where(Event.id.in_(ids)).options(selectinload(Event.transitions))
+                        query = (
+                            select(Event)
+                            .where(Event.id.in_(ids))
+                            .options(selectinload(Event.transitions))
+                        )
                         maybe = self.session.execute(query)
                         result = await maybe if inspect.isawaitable(maybe) else maybe
                         if inspect.isawaitable(result):
@@ -238,14 +272,21 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                         list_of_events = [byid.get(ev.id, ev) for ev in list_of_events]
             except Exception:
                 # If eager-loading fails, continue — we already avoided destructive __dict__ writes.
-                logger.debug("Failed to eager-load transitions; continuing without load", exc_info=True)
+                logger.debug(
+                    "Failed to eager-load transitions; continuing without load",
+                    exc_info=True,
+                )
 
             return Ok(list_of_events)
         except Exception as exc:  # pragma: no cover - bubble up as Err
             logger.error(f"Error in saveMany: {exc}", exc_info=True)
-            return Err(ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc)))
+            return Err(
+                ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+            )
 
-    async def delete_multi(self, events: list[Event]) -> Result[DeleteTypedDict, ErrorDetail]:
+    async def delete_multi(
+        self, events: list[Event]
+    ) -> Result[DeleteTypedDict, ErrorDetail]:
         result: DeleteTypedDict = {
             "deleted": [],
             "not_found": [],
@@ -300,7 +341,9 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             await self.session.flush()
             return Ok(True)
         except Exception as exc:
-            return Err(ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc)))
+            return Err(
+                ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+            )
 
     async def getMany(self, ids: list[UUID]) -> Result[list[Event], ErrorDetail]:
         _ids = list(dict.fromkeys(ids))
@@ -321,9 +364,13 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
             return Ok(list_of_events)
         except Exception as exc:
-            return Err(ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc)))
+            return Err(
+                ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+            )
 
-    async def get_by_external_uuid(self, external_uuid: UUID) -> Result[Event, ErrorDetail]:
+    async def get_by_external_uuid(
+        self, external_uuid: UUID
+    ) -> Result[Event, ErrorDetail]:
         try:
             result = await self.event_crud.get(
                 self.session,
@@ -344,5 +391,6 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
             return Ok(result)
         except Exception as exc:
-            return Err(ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc)))
-
+            return Err(
+                ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+            )

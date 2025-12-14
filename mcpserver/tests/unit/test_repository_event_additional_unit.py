@@ -1,10 +1,8 @@
-from uuid import uuid4
-
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from result import Err, Ok
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +34,7 @@ async def test_saveMany_success_sets_transitions_and_returns_events():
 @pytest.mark.asyncio
 async def test_saveMany_conflict_resolves_existing(mocker):
     session = MagicMock(spec=AsyncSession)
+
     # flush will raise IntegrityError to trigger conflict branch
     def _raise(*args, **kwargs):
         raise IntegrityError("stmt", {}, Exception("orig"))
@@ -52,7 +51,9 @@ async def test_saveMany_conflict_resolves_existing(mocker):
     # Patch FastCRUD.get to return the existing event
     mocker.patch("fastcrud.FastCRUD.get", return_value=existing)
 
-    ev = Event(name="conflict", external_uuid=existing.external_uuid, state=EventState.CREATED)
+    ev = Event(
+        name="conflict", external_uuid=existing.external_uuid, state=EventState.CREATED
+    )
 
     res = await repo.saveMany([ev])
     assert isinstance(res, Ok)
@@ -64,6 +65,7 @@ async def test_saveMany_conflict_resolves_existing(mocker):
 @pytest.mark.asyncio
 async def test_saveMany_conflict_unresolved_returns_err(mocker):
     session = MagicMock(spec=AsyncSession)
+
     def _raise(*args, **kwargs):
         raise IntegrityError("stmt", {}, Exception("orig"))
 
@@ -112,7 +114,13 @@ async def test_delete_not_found_returns_false(mocker):
     ev.id = uuid4()
 
     # patch repo.getOne to return Err(NOT_FOUND)
-    mocker.patch.object(repo, "getOne", AsyncMock(return_value=Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no"))))
+    mocker.patch.object(
+        repo,
+        "getOne",
+        AsyncMock(
+            return_value=Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no"))
+        ),
+    )
 
     res = await repo.delete(ev)
     assert isinstance(res, Ok)
@@ -129,7 +137,9 @@ async def test_getMany_returns_list(mocker):
     ev2 = Event(name="b", external_uuid=uuid4(), state=EventState.CREATED)
 
     # Patch FastCRUD.get_multi to return expected structure
-    mocker.patch("fastcrud.FastCRUD.get_multi", return_value={"data": [ev1, ev2], "total_count": 2})
+    mocker.patch(
+        "fastcrud.FastCRUD.get_multi", return_value={"data": [ev1, ev2], "total_count": 2}
+    )
 
     res = await repo.getMany([ev1.id, ev2.id])
     assert isinstance(res, Ok)

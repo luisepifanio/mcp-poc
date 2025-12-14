@@ -1,9 +1,9 @@
-import pytest
 from uuid import uuid4
 
+import pytest
 from result import Ok
 
-from app.core.entities import Event, EventTransition, EventState
+from app.core.entities import Event, EventState, EventTransition
 from app.infrastructure.db.repository_event import AsyncSQLAlchemyEventRepository
 
 

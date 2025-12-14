@@ -116,6 +116,7 @@ async def uow_factory(async_session_local):
     of `AsyncSQLAlchwemyUnitOfWork`.
     """
     from contextlib import asynccontextmanager
+
     from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
 
     AsyncSessionLocal = async_session_local
