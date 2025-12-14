@@ -7,7 +7,7 @@ from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
 
 
 @pytest.mark.asyncio
-async def test_unit_of_work_commit_and_close(mocker):
+async def test_unit_of_work_commit_and_close(mocker, uow_factory):
     session = MagicMock(spec=AsyncSession)
     session.commit = AsyncMock()
     session.rollback = AsyncMock()
@@ -20,7 +20,7 @@ async def test_unit_of_work_commit_and_close(mocker):
         return_value=mock_repo,
     )
 
-    async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
+    async with uow_factory(session) as uow:
         assert uow.session is session
         assert hasattr(uow, "courses")
 
@@ -30,7 +30,7 @@ async def test_unit_of_work_commit_and_close(mocker):
 
 
 @pytest.mark.asyncio
-async def test_unit_of_work_rollback_on_exception(mocker):
+async def test_unit_of_work_rollback_on_exception(mocker, uow_factory):
     session = MagicMock(spec=AsyncSession)
     session.commit = AsyncMock()
     session.rollback = AsyncMock()
@@ -42,7 +42,7 @@ async def test_unit_of_work_rollback_on_exception(mocker):
     )
 
     with pytest.raises(ValueError):
-        async with AsyncSQLAlchwemyUnitOfWork(session):
+        async with uow_factory(session):
             raise ValueError("boom")
 
     session.rollback.assert_awaited()
