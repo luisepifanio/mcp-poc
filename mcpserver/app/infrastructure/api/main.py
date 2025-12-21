@@ -1,12 +1,18 @@
+import asyncio
 import logging
 import random
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from typing import cast
 
 from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
+from faststream.redis.fastapi import RedisRouter
 from pydantic import BaseModel
 
 from app.core.logconfig import setup_logging
+from app.infrastructure.redis.main import app as faststream_app
+from app.infrastructure.redis.main import broker as redis_broker
 
 from .routes import router
 
@@ -14,11 +20,25 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # Load the ML model
     from app.infrastructure.db.connection import setup_database_models
 
+    # Cast to a typed async callable to satisfy the type checker
+    setup_database_models = cast(Callable[[], Awaitable[None]], setup_database_models)
     setup_logging()
+
+    # Asegúrate de que el broker esté conectado
+    if (
+        not hasattr(redis_broker, "_connection")
+        or redis_broker._connection is None
+        or redis_broker._connection.connection is None
+    ):
+        await redis_broker.connect()
+
+    # Inicia FastStream en segundo plano
+    asyncio.create_task(faststream_app.run())
+
     await setup_database_models()
 
     yield
@@ -29,6 +49,10 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(router)
 
 
+redis_router = RedisRouter(url="redis://localhost:6379")
+app.include_router(redis_router)
+
+
 class Hello(BaseModel):
     message: str
 
@@ -37,6 +61,17 @@ class Hello(BaseModel):
 @app.get("/ping")
 async def ping() -> str:
     logger.info("Ping received")
+    # Asegúrate de que el broker esté conectado
+    if (
+        not hasattr(redis_broker, "_connection")
+        or redis_broker._connection is None
+        or redis_broker._connection.connection is None
+    ):
+        await redis_broker.connect()
+
+    await redis_broker.publish(
+        {"message": "Hi there from /ping endpoint"}, stream="in-subject"
+    )
     return "pong"
 
 

@@ -10,6 +10,11 @@ ENV UV_PYTHON_INSTALL_DIR=/python
 # Only use the managed Python version
 ENV UV_PYTHON_PREFERENCE=only-managed
 
+# Instala Git antes de ejecutar `uv sync`
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install Python before the project for caching
 RUN uv python install 3.12
 

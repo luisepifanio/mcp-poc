@@ -6,6 +6,7 @@ import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
 from fastapi.testclient import TestClient as FastApiTestClient
+from faststream.redis import TestRedisBroker
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel
@@ -26,8 +27,8 @@ async def setup_test_env():
     logger.info("🟢 Test environment ready")
 
     # Prompt environment values..
-    for key, value in os.environ.items():
-        logger.info(f"ENV {key}={value}")
+    # for key, value in os.environ.items():
+    #    logger.info(f"ENV {key}={value}")
     # Clear any cached settings from earlier unit tests so functional
     # test env takes effect when we call `getAppSettings()`.
     from app.core import settings as settings_mod

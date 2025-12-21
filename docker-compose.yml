@@ -1,12 +1,51 @@
 services:
+  redis:
+    image: redis:8.4-alpine
+    container_name: redis-stream-server
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./var/lib/redis/data:/data
+    profiles: ["infra"]
+    command: redis-server --save 60 1 --loglevel warning --appendonly yes
+    networks:
+      - mcpnet
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+  # Optional: A web-based GUI to inspect Redis data, including streams
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: redis-commander-web
+    restart: always
+    environment:
+      # Instruct the commander to connect to the 'redis' service defined above
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "9081:8081" # Access the GUI at http://localhost:9081
+    profiles: ["infra"]
+    networks:
+      - mcpnet
   mcp-server:
     build: mcpserver
     ports:
       - "${MCP_SERVER_PORT:-3000}:8000"
+    environment:
+      - ENV=${ENV:-local} # Valor por defecto: "local"
+      - LOG_LEVEL=${LOG_LEVEL:-INFO} # Valor por defecto: "INFO"
+      - database_url=sqlite+aiosqlite:////app/var/lib/database.sqlite
     volumes:
       - ./docs:/app/docs
+      - ./mcpserver/var/lib/database.sqlite:/app/var/lib/database.sqlite
     networks:
       - mcpnet
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/ping"]
       interval: 10s

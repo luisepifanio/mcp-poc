@@ -410,6 +410,24 @@ wheels = [
 ]
 
 [[package]]
+name = "fast-depends"
+version = "3.0.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/07/f3/41e955f5f0811de6ef9f00f8462f2ade7bc4a99b93714c9b134646baa831/fast_depends-3.0.5.tar.gz", hash = "sha256:c915a54d6e0d0f0393686d37c14d54d9ec7c43d7b9def3f3fc4f7b4d52f67f2a", size = 18235, upload-time = "2025-11-30T20:26:12.92Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0a/dd/76697228ae63dcbaf0a0a1b20fc996433a33f184ac4f578382b681dcf5ea/fast_depends-3.0.5-py3-none-any.whl", hash = "sha256:38a3d7044d3d6d0b1bed703691275c870316426e8a9bfa6b1c89e979b15659e2", size = 25362, upload-time = "2025-11-30T20:26:10.96Z" },
+]
+
+[package.optional-dependencies]
+pydantic = [
+    { name = "pydantic" },
+]
+
+[[package]]
 name = "fastapi"
 version = "0.121.0"
 source = { registry = "https://pypi.org/simple" }
@@ -506,6 +524,25 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b2/ae/1fc88455e8e399aff19e591423a948cfcdb712a5974fb8d0cedb31412dae/fastcrud-0.19.2.tar.gz", hash = "sha256:d048177cfd6fc1209a36ee71d9790bc7fc16a2c5d856ff783273699533b43bb3", size = 70870, upload-time = "2025-11-15T19:49:44.711Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/20/6e/f038ca92fe680ad31cee176c61a5536ddbf31f1bbf3923975fd221917abc/fastcrud-0.19.2-py3-none-any.whl", hash = "sha256:1562a905f92196e485d2df2f6ea34f0408702bf41c6cad3a89a1fedf08a4f4d9", size = 98032, upload-time = "2025-11-15T19:49:42.887Z" },
+]
+
+[[package]]
+name = "faststream"
+version = "0.6.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "fast-depends", extra = ["pydantic"] },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ec/2a/bf5617553a7a8af97e374320ee22656132b579a45b1a626e73e198398d0c/faststream-0.6.4.tar.gz", hash = "sha256:e7f0d8e8ccfa3f9014072166f7993cf5d178f57c7daf79fcf37f5ba0e6a3cc68", size = 302404, upload-time = "2025-12-07T11:54:19.165Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/26/75/8b74215e16c3aa005266b7ddd0b812c664f8571c4e0480c5971e99e522d7/faststream-0.6.4-py3-none-any.whl", hash = "sha256:e00306208659c40ed0c6782e93d4536ad9ef320d0a5fb507d4dcd4f2a07eb2f9", size = 507033, upload-time = "2025-12-07T11:54:17.27Z" },
+]
+
+[package.optional-dependencies]
+redis = [
+    { name = "redis" },
 ]
 
 [[package]]
@@ -984,6 +1021,7 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "fastapi-mcp" },
     { name = "fastcrud" },
+    { name = "faststream", extra = ["redis"] },
     { name = "pydantic-settings" },
     { name = "python-json-logger" },
     { name = "result" },
@@ -1011,6 +1049,7 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.121.0" },
     { name = "fastapi-mcp", specifier = ">=0.4.0" },
     { name = "fastcrud", specifier = ">=0.19.2" },
+    { name = "faststream", extras = ["redis"], specifier = ">=0.6.4" },
     { name = "pydantic-settings", specifier = ">=2.11.0" },
     { name = "python-json-logger", specifier = ">=4.0.0" },
     { name = "result", git = "https://github.com/montasaurus/result" },
@@ -1601,6 +1640,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/4c/78/9ace6888cf6d390c9aec3ba93020838b08934959b544a7f10b15db815d29/queuelib-1.8.0.tar.gz", hash = "sha256:582bc65514481100b0539bd671da6b355b878869cfc77d92c63b75fcc9cf8e27", size = 11675, upload-time = "2025-03-31T12:18:46.193Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/70/44/542f4e702fafc477260d3463ae1bcdd113faac9d42336601af50985af914/queuelib-1.8.0-py3-none-any.whl", hash = "sha256:599468c5589716e63d3bb753dae7bf32cc94838ade1e7b450a061faec4a2015d", size = 13615, upload-time = "2025-03-31T12:18:43.526Z" },
+]
+
+[[package]]
+name = "redis"
+version = "7.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/c8/983d5c6579a411d8a99bc5823cc5712768859b5ce2c8afe1a65b37832c81/redis-7.1.0.tar.gz", hash = "sha256:b1cc3cfa5a2cb9c2ab3ba700864fb0ad75617b41f01352ce5779dabf6d5f9c3c", size = 4796669, upload-time = "2025-11-19T15:54:39.961Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/89/f0/8956f8a86b20d7bb9d6ac0187cf4cd54d8065bc9a1a09eb8011d4d326596/redis-7.1.0-py3-none-any.whl", hash = "sha256:23c52b208f92b56103e17c5d06bdc1a6c2c0b3106583985a76a18f83b265de2b", size = 354159, upload-time = "2025-11-19T15:54:38.064Z" },
 ]
 
 [[package]]

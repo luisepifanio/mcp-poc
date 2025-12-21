@@ -10,6 +10,7 @@ dependencies = [
     "fastapi-mcp>=0.4.0",
     "fastapi[standard]>=0.121.0",
     "fastcrud>=0.19.2",
+    "faststream[redis]>=0.6.4",
     "pydantic-settings>=2.11.0",
     "python-json-logger>=4.0.0",
     "result",
