@@ -1,7 +1,9 @@
+import pytest
+
 from app.core import settings as settings_mod
 
 
-def test_resolve_env_file_various(monkeypatch):
+def test_resolve_env_file_various(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENV", "development")
     assert settings_mod.resolve_env_file() == "local.env"
 
@@ -15,7 +17,7 @@ def test_resolve_env_file_various(monkeypatch):
     assert settings_mod.resolve_env_file() is None
 
 
-def test_get_app_settings_singleton(monkeypatch):
+def test_get_app_settings_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
     # Ensure environment variables exist for required fields
     monkeypatch.setenv("ENV", "test")
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")

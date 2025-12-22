@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # @pytest.fixture(autouse=True, scope="session")
 @pytest_asyncio.fixture(scope="session", autouse=True)
-async def setup_test_env():
+async def setup_test_env() -> AsyncGenerator[None, None]:
     # Configura el entorno de prueba
     os.environ["ENV"] = "test"
     load_dotenv(dotenv_path="test.env")

@@ -60,7 +60,8 @@ async def handle_incoming_enqueue_event(
 )  # type: ignore[misc]
 @broker.publisher(stream="out-subject")  # <-- listen here  # type: ignore[misc]
 async def handle_processing_event_queue(
-    body: dict, msg: RedisMessage, redis: Redis
+    body: dict[str, Any],
+    msg: RedisMessage,
 ) -> dict[str, Any] | None:
     try:
         # Process the claimed message

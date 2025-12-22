@@ -7,14 +7,16 @@ from typing import cast
 
 from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
-from faststream.redis.fastapi import RedisRouter
 from pydantic import BaseModel
 
 from app.core.logconfig import setup_logging
+from app.core.settings import getAppSettings
 from app.infrastructure.redis.main import app as faststream_app
 from app.infrastructure.redis.main import broker as redis_broker
 
-from .routes import router
+from .base_router import BaseRouter
+from .course_routes import router
+from .routes import get_routers
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +38,10 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     ):
         await redis_broker.connect()
 
-    # Inicia FastStream en segundo plano
-    asyncio.create_task(faststream_app.run())
+    if getAppSettings().env != "test":
+        logger.info("🟢 Test environment detected, starting FastStream in background...")
+        # Inicia FastStream en segundo plano
+        asyncio.create_task(faststream_app.run())
 
     await setup_database_models()
 
@@ -49,30 +53,12 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(router)
 
 
-redis_router = RedisRouter(url="redis://localhost:6379")
-app.include_router(redis_router)
+for specific in get_routers():
+    app.include_router(specific.router if isinstance(specific, BaseRouter) else specific)
 
 
 class Hello(BaseModel):
     message: str
-
-
-# health check endpoint
-@app.get("/ping")
-async def ping() -> str:
-    logger.info("Ping received")
-    # Asegúrate de que el broker esté conectado
-    if (
-        not hasattr(redis_broker, "_connection")
-        or redis_broker._connection is None
-        or redis_broker._connection.connection is None
-    ):
-        await redis_broker.connect()
-
-    await redis_broker.publish(
-        {"message": "Hi there from /ping endpoint"}, stream="in-subject"
-    )
-    return "pong"
 
 
 @app.get("/hello", operation_id="say_hello")
