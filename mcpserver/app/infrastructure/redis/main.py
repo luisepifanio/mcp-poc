@@ -3,9 +3,7 @@ from typing import Any
 
 from faststream import AckPolicy, Context, ContextRepo, FastStream
 from faststream.redis import RedisBroker, StreamSub
-from faststream.redis.annotations import Redis, RedisMessage
-
-from app.core.usecases.event_usecases import EventUseCaseInput, EventUseCaseOutput
+from faststream.redis.annotations import RedisMessage
 
 logger = logging.getLogger(__name__)
 # Configuración del broker de Redis

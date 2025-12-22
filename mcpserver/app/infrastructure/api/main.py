@@ -1,12 +1,12 @@
 import asyncio
 import logging
 import random
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Callable, Coroutine
 from contextlib import asynccontextmanager
-from typing import cast
+from typing import Any, cast
 
 from fastapi import FastAPI
-from fastapi_mcp import FastApiMCP
+from fastapi_mcp import FastApiMCP  # type: ignore[import]
 from pydantic import BaseModel
 
 from app.core.logconfig import setup_logging
@@ -27,7 +27,10 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     from app.infrastructure.db.connection import setup_database_models
 
     # Cast to a typed async callable to satisfy the type checker
-    setup_database_models = cast(Callable[[], Awaitable[None]], setup_database_models)
+
+    setup_database_models = cast(
+        Callable[[], Coroutine[Any, Any, None]], setup_database_models
+    )
     setup_logging()
 
     # Asegúrate de que el broker esté conectado

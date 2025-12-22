@@ -1,15 +1,7 @@
 import logging
-from collections.abc import Sequence
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
-from faststream.redis import RedisBroker
-from httpx import AsyncClient
-from pytest_mock import MockerFixture
-
-from app.infrastructure.api.base_router import BaseRouter
-from app.infrastructure.api.pingrouter import PingRouter
 
 logger = logging.getLogger(__name__)
 
