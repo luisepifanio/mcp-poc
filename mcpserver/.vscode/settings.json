@@ -11,5 +11,15 @@
         "tests"
     ],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
+    "python.testing.pytestEnabled": true,
+    "editor.rulers": [
+        {
+            "column": 80,
+            "color": "#ff9900" // Example color (orange)
+        },
+        {
+            "column": 90,
+            "color": "#ff2f00" // Example color (purple)
+        }
+    ]
 }

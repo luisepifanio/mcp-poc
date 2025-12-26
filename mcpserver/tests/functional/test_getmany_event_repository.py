@@ -6,6 +6,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 import pytest
+from pytest_mock import MockerFixture
 from result import Err, Ok
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete
@@ -47,7 +48,7 @@ async def events_in_db(dbsession: AsyncSession) -> AsyncGenerator[list[Event], N
 
 
 @pytest.mark.asyncio
-async def test_getmany_events(dbsession: AsyncSession, events_in_db: list[Event]):
+async def test_getmany_events(dbsession: AsyncSession, events_in_db: list[Event]) -> None:
     repo = AsyncSQLAlchemyEventRepository(dbsession)
     ids: list[UUID] = []
     ids += [
@@ -68,8 +69,8 @@ async def test_getmany_events(dbsession: AsyncSession, events_in_db: list[Event]
 
 @pytest.mark.asyncio
 async def test_getmany_runtime_error_handling(
-    mocker, dbsession: AsyncSession, events_in_db: list[Event]
-):
+    mocker: MockerFixture, dbsession: AsyncSession, events_in_db: list[Event]
+) -> None:
     mocker.patch("fastcrud.FastCRUD.get_multi", side_effect=ValueError("Mocked error"))
 
     repo = AsyncSQLAlchemyEventRepository(dbsession)

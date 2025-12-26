@@ -77,8 +77,8 @@ class Event(UUIDBase, AuditableBase, table=True):
     __tablename__: str = "events"  #  type: ignore
     name: str = Field(max_length=100)
     external_uuid: UUID | None = Field(unique=True, default=None)
-    payload: dict = Field(default_factory=dict, sa_column=Column(JSON))
-    context: dict | None = Field(default_factory=dict, sa_column=Column(JSON))
+    payload: JSONDict = Field(default_factory=dict, sa_column=Column(JSON))
+    context: JSONDict | None = Field(default_factory=dict, sa_column=Column(JSON))
     state: EventState = Field(
         sa_column=Column(Enum(EventState)), default=EventState.CREATED
     )

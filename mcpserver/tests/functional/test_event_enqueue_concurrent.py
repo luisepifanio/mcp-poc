@@ -8,9 +8,9 @@ from result import Ok, Result
 
 from app.core.unit_of_work import UnitOfWork
 from app.core.usecases.event_usecases import (
+    EnqueuedEventUseCaseInput,
+    EnqueuedEventUseCaseOutput,
     EnqueueEventUseCase,
-    EventUseCaseInput,
-    EventUseCaseOutput,
 )
 from app.errors import ErrorDetail
 
@@ -29,10 +29,10 @@ async def test_enqueue_concurrent_idempotency(
 
     external = uuid4()
 
-    async def run_in_session() -> Result[EventUseCaseOutput, ErrorDetail]:
+    async def run_in_session() -> Result[EnqueuedEventUseCaseOutput, ErrorDetail]:
         async with uow_factory() as uow:
             uc = EnqueueEventUseCase(uow)
-            inp = EventUseCaseInput(
+            inp = EnqueuedEventUseCaseInput(
                 name="concurrent-test", external_uuid=external, payload={"x": 1}
             )
             return await uc.execute(inp)

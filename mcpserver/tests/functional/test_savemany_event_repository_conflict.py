@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio
-async def test_save_or_resolve_does_not_update_on_conflict(dbsession: AsyncSession):
+async def test_save_or_resolve_does_not_update_on_conflict(
+    dbsession: AsyncSession,
+) -> None:
     """Ensure that save_or_resolve does not silently update an existing row on uniqueness conflict.
 
     Steps:

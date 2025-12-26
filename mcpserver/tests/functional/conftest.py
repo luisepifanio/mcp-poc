@@ -1,6 +1,7 @@
 import logging
 import os
 from collections.abc import AsyncGenerator
+from typing import Any, Callable, Optional
 
 import pytest
 import pytest_asyncio
@@ -85,7 +86,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def async_session_local():
+async def async_session_local() -> Any:
     """Provides the `AsyncSession` factory (`async_sessionmaker`) used by tests.
 
     Returns the value produced by `app.infrastructure.db.connection.get_session_local()`
@@ -97,7 +98,7 @@ async def async_session_local():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def uow_factory(async_session_local):
+async def uow_factory(async_session_local: Any) -> Callable[..., Any]:
     """Provide a small async contextmanager factory for `UnitOfWork` instances.
 
     Usage in tests:
@@ -122,7 +123,7 @@ async def uow_factory(async_session_local):
     AsyncSessionLocal = async_session_local
 
     @asynccontextmanager
-    async def _uow(session=None):
+    async def _uow(session: Optional[AsyncSession] = None) -> AsyncGenerator[Any, None]:
         if session is None:
             async with AsyncSessionLocal() as session:
                 async with AsyncSQLAlchwemyUnitOfWork(session) as uow:

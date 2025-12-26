@@ -21,20 +21,20 @@ class ErrorDetail(BaseModel):
 
 
 class ErrorDetailBuilder:
-    def __init__(self):
+    def __init__(self) -> None:
         self._error: ErrorCatalog | None = None
         self._detail: str | None = None
         self._metadata: dict = {}
 
-    def error(self, error: ErrorCatalog):
+    def error(self, error: ErrorCatalog) -> "ErrorDetailBuilder":
         self._error = error
         return self
 
-    def detail(self, detail: str):
+    def detail(self, detail: str) -> "ErrorDetailBuilder":
         self._detail = detail
         return self
 
-    def metadata(self, metadata: dict):
+    def metadata(self, metadata: dict) -> "ErrorDetailBuilder":
         self._metadata.update(metadata or {})
         return self
 

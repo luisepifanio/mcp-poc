@@ -1,8 +1,8 @@
 import json
+from typing import cast
 from uuid import UUID, uuid4
 
-from pydantic import Field, RootModel, ValidationError
-from pydantic.dataclasses import dataclass as pydantic_dataclass
+from pydantic import BaseModel, Field, RootModel, ValidationError
 from result import Err, Ok, Result
 
 from app.errors import ErrorCatalog, ErrorDetail
@@ -14,27 +14,22 @@ from ..usecase import AsyncUseCase
 LOOKUP_EVENT_NAMES = {"GetEventById", "GetEventByExternalId"}
 
 
-@pydantic_dataclass(frozen=True)
-class EventUseCaseInput:
+class EnqueuedEventUseCaseInput(BaseModel):
     name: str = Field(max_length=100)
     payload: JSONDict = Field()
     id: UUID | None = Field(default_factory=uuid4)
     external_uuid: UUID | None = Field(default_factory=uuid4)
-    context: JSONDict | None = Field(default_factory=dict)
+    context: JSONDict | None = Field(default_factory=lambda: {})
     state: EventState | None = EventState.CREATED
 
 
-# input_adapter = TypeAdapter(EventUseCaseInput)
-
-
-@pydantic_dataclass(frozen=True)
-class EventUseCaseOutput:
+class EnqueuedEventUseCaseOutput(BaseModel):
     name: str = Field(max_length=100)
     payload: JSONDict = Field()
     id: UUID = Field()
     state: EventState = Field()
-    external_uuid: UUID | None = Field()
-    context: JSONDict | None = Field(default_factory=dict)
+    external_uuid: UUID | None = Field(default=None)
+    context: JSONDict | None = Field(default_factory=lambda: {})
     # Declare the JSON column
     result: EventResultStructure | None = Field(default=None)
 
@@ -85,14 +80,16 @@ def transition_event(event: Event, new_state: EventState) -> Result[Event, Error
 
 
 class EnqueueEventUseCase(
-    AsyncUseCase[EventUseCaseInput, Result[EventUseCaseOutput, ErrorDetail]]
+    AsyncUseCase[
+        EnqueuedEventUseCaseInput, Result[EnqueuedEventUseCaseOutput, ErrorDetail]
+    ]
 ):
     def __init__(self, uow: UnitOfWork):
         self.uow = uow
 
     async def execute(
-        self, input: EventUseCaseInput
-    ) -> Result[EventUseCaseOutput, ErrorDetail]:
+        self, input: EnqueuedEventUseCaseInput
+    ) -> Result[EnqueuedEventUseCaseOutput, ErrorDetail]:
         """
         Enqueues an event for processing.
         1. Assumes idempotency by external_uuid first, then by id second
@@ -116,7 +113,7 @@ class EnqueueEventUseCase(
         # 1) Validate input pydantic dataclass (constructor should have run validations already)
         try:
             # Re-constructing a RootModel ensures pydantic validation of the dataclass fields
-            RootModel[EventUseCaseInput](input)
+            RootModel[EnqueuedEventUseCaseInput](input)
         except ValidationError as exc:
             return Err(
                 ErrorDetail(
@@ -126,21 +123,11 @@ class EnqueueEventUseCase(
             )
 
         async with self.uow:
-            existing_event = None
-            # Check by external_uuid first
-            if input.external_uuid is not None:
-                # Check if event with the same external_uuid already exists
-                existing_event = await self.uow.events.get_by_external_uuid(
-                    input.external_uuid
-                )
-            match existing_event:
-                case Ok(event):
-                    # Event with the same external_uuid already exists
-                    return Ok(self.as_output(event))
-
-            # Check by id if not found by external_uuid
+            # CHECK: Is probably better try a direct insert
             existing_event = (
-                await self.uow.events.getOne(input.id)
+                await self.uow.events.get_by_external_uuid(input.external_uuid)
+                if input.external_uuid is not None
+                else await self.uow.events.getOne(input.id)
                 if input.id
                 else Err(
                     ErrorDetail(
@@ -149,6 +136,7 @@ class EnqueueEventUseCase(
                     )
                 )
             )
+
             match existing_event:
                 case Ok(event):
                     # Event with the same id already exists
@@ -212,7 +200,7 @@ class EnqueueEventUseCase(
                                     # Validate output via pydantic before returning
                                     try:
                                         out = self.as_output(saved_model)
-                                        RootModel[EventUseCaseOutput](out)
+                                        RootModel[EnqueuedEventUseCaseOutput](out)
                                     except ValidationError as exc:
                                         return Err(
                                             ErrorDetail(
@@ -252,14 +240,14 @@ class EnqueueEventUseCase(
                             error=ErrorCatalog.RUNTIME_FAILED.value,
                             detail="🐠 Please check this specific case",
                             metadata={
-                                "input": RootModel[EventUseCaseInput](input).model_dump(
-                                    mode="json"
-                                )
+                                "input": RootModel[EnqueuedEventUseCaseInput](
+                                    input
+                                ).model_dump(mode="json")
                             },
                         )
                     )
 
-    def as_event_entity(self, input: EventUseCaseInput) -> Event:
+    def as_event_entity(self, input: EnqueuedEventUseCaseInput) -> Event:
         return Event(
             # id=input.id or uuid4(),
             name=input.name,
@@ -280,12 +268,13 @@ class EnqueueEventUseCase(
         if value is None:
             return None
         try:
-            return json.loads(json.dumps(value, sort_keys=True))
+            normalized = json.loads(json.dumps(value, sort_keys=True))
+            return cast(JSONDict, normalized)
         except Exception:
             return value
 
-    def as_output(self, event: Event) -> EventUseCaseOutput:
-        return EventUseCaseOutput(
+    def as_output(self, event: Event) -> EnqueuedEventUseCaseOutput:
+        return EnqueuedEventUseCaseOutput(
             id=event.id,
             name=event.name,
             state=event.state,
@@ -293,4 +282,24 @@ class EnqueueEventUseCase(
             payload=event.payload,
             context=event.context,
             result=event.result,
+        )
+
+
+class ProcessEventUseCase(
+    AsyncUseCase[
+        EnqueuedEventUseCaseInput, Result[EnqueuedEventUseCaseOutput, ErrorDetail]
+    ]
+):
+    def __init__(self, uow: UnitOfWork):
+        self.uow = uow
+
+    async def execute(
+        self, input: EnqueuedEventUseCaseInput
+    ) -> Result[EnqueuedEventUseCaseOutput, ErrorDetail]:
+        # Placeholder for processing logic
+        return Err(
+            ErrorDetail(
+                error=ErrorCatalog.UNIMPLENTED.value,
+                detail="ProcessEventUseCase is not implemented yet.",
+            )
         )

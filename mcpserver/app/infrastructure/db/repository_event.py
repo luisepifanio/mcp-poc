@@ -1,13 +1,14 @@
 import logging
 from collections.abc import Iterable
-from typing import TypedDict, cast
+from typing import Any, TypedDict, cast
 from uuid import UUID
 
 from fastcrud import FastCRUD
 from result import Err, Ok, Result
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlmodel import select
+from sqlmodel import or_, select
 
 from app.core.entities import Event, EventTransition
 from app.core.respository_event import EventRepository
@@ -31,8 +32,8 @@ class GetMultiTypedDict(TypedDict, total=False):
 class AsyncSQLAlchemyEventRepository(EventRepository):
     def __init__(self, session: AsyncSession):
         self.session: AsyncSession = session
-        self.event_crud = FastCRUD(Event)
-        self.transition_crud = FastCRUD(EventTransition)
+        self.event_crud: FastCRUD = FastCRUD(Event)
+        self.transition_crud: FastCRUD = FastCRUD(EventTransition)
 
     # -------------------------------------------------------------------------
     # saveMany: Simple insert, fails on conflict (no conflict resolution)
@@ -80,8 +81,6 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         - This preserves the parent transaction for coordinated use case operations.
         """
         try:
-            from sqlalchemy.exc import IntegrityError
-
             list_of_events: list[Event] = []
 
             for event in events:
@@ -161,7 +160,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
         return found
 
-    async def _select_event_by_external_uuid(self, external_uuid) -> Event | None:
+    async def _select_event_by_external_uuid(self, external_uuid: UUID) -> Event | None:
         """SELECT event by external_uuid, handling async properly."""
         try:
             query = select(Event).where(
@@ -173,7 +172,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         except Exception:
             return None
 
-    async def _select_event_by_id(self, event_id) -> Event | None:
+    async def _select_event_by_id(self, event_id: UUID) -> Event | None:
         """SELECT event by id, handling async properly."""
         try:
             query = select(Event).where(
@@ -185,16 +184,26 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         except Exception:
             return None
 
-    def _coerce_to_event(self, found) -> Event | None:
+    def _coerce_to_event(self, found: Any) -> Event | None:
         """Coerce various return shapes to Event model."""
         if isinstance(found, Event):
             return found
         try:
-            if hasattr(Event, "model_validate"):
-                return Event.model_validate(found)
-            return Event(**found)
+            return Event.model_validate(found)  # type: ignore[arg-type]
         except Exception:
-            return None
+            logger.warning(
+                "Failed to coerce found object to Event via model_validate: %s",
+                type(found),
+            )
+        # Assume dict-like otherwise
+        try:
+            return Event(**found)  # type: ignore[arg-type]
+        except Exception:
+            logger.warning(
+                "Failed to coerce found object to Event via dict constructor: %s",
+                type(found),
+            )
+        return None
 
     def _ensure_transitions_collection(self, event: Event) -> None:
         """Ensure transitions collection exists without breaking SQLAlchemy internals."""
@@ -203,6 +212,103 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                 event.transitions = []
         except Exception:
             pass
+
+    async def save_or_resolve_one(self, event: Event) -> Result[Event, ErrorDetail]:
+        """Insert or resolve a single Event.
+
+        Assumes event is loaded with necessary relationships/transitions.
+
+        Strategy:
+        - Attempt insert.
+        - On IntegrityError: resolve the existing canonical row using resolve_this_events.
+        - If resolution fails or is ambiguous, return an error_detail.
+        """
+
+        try:
+            if not self.session.object_session(event):
+                event = await self.session.merge(event)
+                await self.session.refresh(event, attribute_names=["transitions"])
+
+            self.session.add(event)
+            await self.session.flush()
+
+            # ensure transitions collection exists
+            if getattr(event, "transitions", None) is None:
+                event.transitions = []
+
+            # Properly build and execute a SELECT to eager-load transitions
+            query = (
+                select(Event)
+                .where(Event.id == event.id)
+                .options(selectinload(Event.transitions))
+            )
+            result = await self.session.execute(query)
+            evt = result.scalars().one()
+            return Ok(evt)
+
+        except IntegrityError:
+            logger.warning(
+                "IntegrityError on save_or_resolve_one for event (%s,%s)",
+                event.id,
+                event.external_uuid,
+            )
+
+            resolved: Result[list[Event], ErrorDetail] = await self.resolve_this_events(
+                [event]
+            )
+
+            return resolved.and_then(
+                lambda evs: Ok(evs[0])
+                if len(evs) == 1
+                else Err(
+                    ErrorDetail(
+                        error=ErrorCatalog.RUNTIME_FAILED.value,
+                        detail="Event resolution failed on uniqueness after conflict",
+                    )
+                )
+            )
+
+        except Exception as exc:
+            logger.error(f"Error in save_or_resolve_one: {exc}", exc_info=True)
+            return Err(
+                ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+            )
+
+    async def resolve_this_events(
+        self, list_of_events: list[Event]
+    ) -> Result[list[Event], ErrorDetail]:
+        uids = [ev.id for ev in list_of_events if ev.id is not None]
+        external_uids = [
+            ev.external_uuid for ev in list_of_events if ev.external_uuid is not None
+        ]
+
+        expression = (
+            or_(Event.id.in_(uids), Event.external_uuid.in_(external_uids))
+            if len(uids) > 0 and len(external_uids) > 0
+            else Event.id.in_(uids)
+            if len(uids) > 0
+            else Event.external_uuid.in_(external_uids)
+        )
+        try:
+            query = (
+                select(Event)
+                .where(expression, Event.deleted_at.is_(None))
+                .options(selectinload(Event.transitions))
+            )
+            result = await self.session.execute(query)
+            return Ok(list(result.scalars().all()))
+
+        except Exception:
+            logger.debug(
+                "Failed to eager-load transitions; continuing without load",
+                exc_info=True,
+            )
+            return Err(
+                ErrorDetail(
+                    error=ErrorCatalog.RUNTIME_FAILED.value,
+                    detail=f"Failed to resolve existing events on ids {uids} or external_uuids {external_uids}",
+                )
+            )
 
     async def _eager_load_transitions(self, list_of_events: list[Event]) -> list[Event]:
         """Eager-load transitions to prevent lazy-load outside greenlet context."""

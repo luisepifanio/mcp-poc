@@ -5,8 +5,8 @@ from result import Err, Ok
 
 from app.core.entities import Event, EventState
 from app.core.usecases.event_usecases import (
+    EnqueuedEventUseCaseInput,
     EnqueueEventUseCase,
-    EventUseCaseInput,
     transition_event,
 )
 from app.errors import ErrorCatalog, ErrorDetail
@@ -75,7 +75,7 @@ async def test_execute_propagates_save_runtime_error():
     uow = SimpleUoW(repo)
     uc = EnqueueEventUseCase(uow)
 
-    inp = EventUseCaseInput(name="rtex", external_uuid=None, payload={})
+    inp = EnqueuedEventUseCaseInput(name="rtex", external_uuid=None, payload={})
     res = await uc.execute(inp)
 
     assert isinstance(res, Err)
@@ -95,7 +95,7 @@ async def test_execute_handles_save_returning_multiple_events_as_error():
     uow = SimpleUoW(repo)
     uc = EnqueueEventUseCase(uow)
 
-    inp = EventUseCaseInput(name="multi", external_uuid=None, payload={})
+    inp = EnqueuedEventUseCaseInput(name="multi", external_uuid=None, payload={})
     res = await uc.execute(inp)
 
     assert isinstance(res, Err)
@@ -120,7 +120,9 @@ async def test_getone_err_non_not_found_returns_runtime_failed_case():
     uow = SimpleUoW(repo)
     uc = EnqueueEventUseCase(uow)
 
-    inp = EventUseCaseInput(name="normal", external_uuid=None, id=uuid4(), payload={})
+    inp = EnqueuedEventUseCaseInput(
+        name="normal", external_uuid=None, id=uuid4(), payload={}
+    )
     res = await uc.execute(inp)
 
     assert isinstance(res, Err)

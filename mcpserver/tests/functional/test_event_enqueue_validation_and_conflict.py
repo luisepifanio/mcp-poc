@@ -5,7 +5,10 @@ import pytest
 from result import Err, Ok
 
 from app.core.entities import EventState
-from app.core.usecases.event_usecases import EnqueueEventUseCase, EventUseCaseInput
+from app.core.usecases.event_usecases import (
+    EnqueuedEventUseCaseInput,
+    EnqueueEventUseCase,
+)
 from app.errors import ErrorCatalog, ErrorDetail
 
 
@@ -64,7 +67,7 @@ async def test_enqueue_rejects_invalid_initial_state(mocker, uow_factory):
     )
     async with uow_factory(session) as uow:
         uc = EnqueueEventUseCase(uow)
-        inp = EventUseCaseInput(
+        inp = EnqueuedEventUseCaseInput(
             name="badstate",
             external_uuid=uuid4(),
             payload={},
@@ -124,7 +127,9 @@ async def test_payload_normalization_before_save(mocker, uow_factory):
     async with uow_factory(session) as uow:
         uc = EnqueueEventUseCase(uow)
         payload = {"b": 1, "a": 2}
-        inp = EventUseCaseInput(name="normalize", external_uuid=external, payload=payload)
+        inp = EnqueuedEventUseCaseInput(
+            name="normalize", external_uuid=external, payload=payload
+        )
         res = await uc.execute(inp)
         assert isinstance(res, Ok)
         # confirm saved payload normalized deterministically
@@ -159,7 +164,7 @@ async def test_integrity_conflict_returns_existing(mocker, uow_factory):
 
     async with uow_factory(session) as uow:
         uc = EnqueueEventUseCase(uow)
-        inp = EventUseCaseInput(
+        inp = EnqueuedEventUseCaseInput(
             name="new-one", external_uuid=existing.external_uuid, payload={}
         )
         res = await uc.execute(inp)

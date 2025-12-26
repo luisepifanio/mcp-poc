@@ -4,7 +4,10 @@ import pytest
 from result import Err, Ok
 
 from app.core.entities import EventState
-from app.core.usecases.event_usecases import EnqueueEventUseCase, EventUseCaseInput
+from app.core.usecases.event_usecases import (
+    EnqueuedEventUseCaseInput,
+    EnqueueEventUseCase,
+)
 from app.errors import ErrorCatalog, ErrorDetail
 
 
@@ -87,7 +90,7 @@ async def test_enqueue_idempotent_by_external_uuid(mocker, uow_factory):
 
     async with uow_factory(session) as uow:
         uc = EnqueueEventUseCase(uow)
-        inp = EventUseCaseInput(
+        inp = EnqueuedEventUseCaseInput(
             name="idemp-test", external_uuid=external, payload={"k": "v"}
         )
 

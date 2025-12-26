@@ -6,8 +6,8 @@ from result import Err, Ok
 from app.core.entities import Event, EventState
 from app.core.usecases.event_usecases import (
     LOOKUP_EVENT_NAMES,
+    EnqueuedEventUseCaseInput,
     EnqueueEventUseCase,
-    EventUseCaseInput,
 )
 from app.errors import ErrorCatalog, ErrorDetail
 
@@ -61,7 +61,7 @@ async def test_enqueue_returns_existing_by_external_uuid():
     uow = FakeUoW(repo)
     uc = EnqueueEventUseCase(uow)
 
-    inp = EventUseCaseInput(
+    inp = EnqueuedEventUseCaseInput(
         name=ev.name, external_uuid=ev.external_uuid, id=ev.id, payload={"x": 1}
     )
     res = await uc.execute(inp)
@@ -81,7 +81,9 @@ async def test_enqueue_returns_existing_by_id():
     uow = FakeUoW(repo)
     uc = EnqueueEventUseCase(uow)
 
-    inp = EventUseCaseInput(name=ev.name, external_uuid=None, id=ev.id, payload={"x": 1})
+    inp = EnqueuedEventUseCaseInput(
+        name=ev.name, external_uuid=None, id=ev.id, payload={"x": 1}
+    )
     res = await uc.execute(inp)
 
     assert isinstance(res, Ok)
@@ -103,7 +105,9 @@ async def test_enqueue_creates_new_and_saves():
     uow = FakeUoW(repo)
     uc = EnqueueEventUseCase(uow)
 
-    inp = EventUseCaseInput(name="created", external_uuid=None, payload={"created": True})
+    inp = EnqueuedEventUseCaseInput(
+        name="created", external_uuid=None, payload={"created": True}
+    )
     res = await uc.execute(inp)
 
     assert isinstance(res, Ok)
@@ -124,7 +128,9 @@ async def test_enqueue_lookup_event_returns_not_found_error():
     uow = FakeUoW(repo)
     uc = EnqueueEventUseCase(uow)
 
-    inp = EventUseCaseInput(name=name, external_uuid=None, payload={"lookup": True})
+    inp = EnqueuedEventUseCaseInput(
+        name=name, external_uuid=None, payload={"lookup": True}
+    )
     res = await uc.execute(inp)
 
     assert isinstance(res, Err)

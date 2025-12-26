@@ -8,7 +8,7 @@ from app.errors import ErrorCatalog
 
 
 @pytest.mark.asyncio
-async def test_asyncsqlalchemyeventrepo_getone_ok_and_not_found(uow_factory):
+async def test_asyncsqlalchemyeventrepo_getone_ok_and_not_found(uow_factory) -> None:
     """Integration test: persist an Event via the real repository and verify getOne behavior."""
     # Use the provided uow_factory to obtain a UnitOfWork instance
     async with uow_factory() as uow:

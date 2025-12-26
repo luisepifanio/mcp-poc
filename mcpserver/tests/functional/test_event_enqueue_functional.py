@@ -4,7 +4,10 @@ import pytest
 from result import Err, Ok
 
 from app.core.entities import EventState
-from app.core.usecases.event_usecases import EnqueueEventUseCase, EventUseCaseInput
+from app.core.usecases.event_usecases import (
+    EnqueuedEventUseCaseInput,
+    EnqueueEventUseCase,
+)
 from app.errors import ErrorCatalog, ErrorDetail
 
 
@@ -57,7 +60,7 @@ async def test_enqueue_with_real_uow_patches_repo(mocker, uow_factory):
 
     async with uow_factory(session) as uow:
         uc = EnqueueEventUseCase(uow)
-        inp = EventUseCaseInput(
+        inp = EnqueuedEventUseCaseInput(
             name="functional-test", external_uuid=None, payload={"functional": True}
         )
         res = await uc.execute(inp)
