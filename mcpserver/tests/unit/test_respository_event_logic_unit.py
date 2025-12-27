@@ -28,6 +28,9 @@ class FakeRepo(EventRepository):
         """Idempotent save - returns saved or existing events."""
         return self._many_return
 
+    async def save_or_resolve_one(self, event: Event) -> Ok[Event] | Err[ErrorDetail]:
+        return Ok(event)
+
 
 @pytest.mark.asyncio
 async def test_getone_success_and_failure_cases():

@@ -131,6 +131,24 @@ class EventRepository(ABC):
         """
         pass
 
+    @abstractmethod
+    async def save_or_resolve_one(self, event: Event) -> Result[Event, ErrorDetail]:
+        """Inserts a single event or resolves to existing one on conflict.
+
+        Delegates to save_or_resolve(). This is an idempotent operation that
+        will not fail on integrity errors, instead returning the existing
+        canonical row.
+
+        Args:
+            event (Event): The event to be saved or resolved.
+
+        Returns:
+            Result[Event, ErrorDetail]: The result of the save or resolve operation.
+            An event instance (either newly inserted or existing canonical row)
+            if successful, or an ErrorDetail if an error occurs.
+        """
+        pass
+
     async def save(self, event: Event) -> Result[Event, ErrorDetail]:
         """Inserts a single event in the repository.
 

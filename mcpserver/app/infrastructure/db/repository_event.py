@@ -80,45 +80,64 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
           then resolve the existing canonical row.
         - This preserves the parent transaction for coordinated use case operations.
         """
-        try:
-            list_of_events: list[Event] = []
 
-            for event in events:
-                try:
-                    # Use savepoint to isolate this insert attempt
-                    async with self.session.begin_nested():
-                        self.session.add(event)
-                        await self.session.flush()
+        list_of_events: list[Event] = []
+        list_of_conflicted_events: list[Event] = []
+        for event in events:
+            try:
+                logger.info(
+                    "Attempting to save_or_resolve event (id=%s, external_uuid=%s)",
+                    event.id,
+                    event.external_uuid,
+                )
+                self.session.begin_nested()
+                self.session.add(event)
+                await self.session.flush()
+                # Insert succeeded
+                self._ensure_transitions_collection(event)
+                list_of_events.append(event)
+            except IntegrityError:
+                await self.session.rollback()  # ROLLBACK TO SAVEPOINT
+                logger.warning(
+                    "IntegrityError on save_or_resolve for event (id=%s, external_uuid=%s)",
+                    event.id,
+                    event.external_uuid,
+                )
+                list_of_conflicted_events.append(event)
+            except Exception as exc:
+                logger.error(f"Error in save_or_resolve: {exc}", exc_info=True)
+                return Err(
+                    ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+                )
 
-                    # Insert succeeded
-                    self._ensure_transitions_collection(event)
-                    list_of_events.append(event)
-
-                except IntegrityError:
-                    # Savepoint was automatically rolled back by begin_nested context
-                    # Now try to resolve the existing canonical row
-                    resolved = await self._resolve_existing_event(event)
-                    if resolved is not None:
-                        self._ensure_transitions_collection(resolved)
-                        list_of_events.append(resolved)
-                    else:
-                        return Err(
-                            ErrorDetail(
-                                error=ErrorCatalog.RUNTIME_FAILED.value,
-                                detail="Conflict detected but existing event could not be resolved",
-                            )
-                        )
-
-            # Eager-load transitions to avoid lazy-load outside greenlet context
-            list_of_events = await self._eager_load_transitions(list_of_events)
-
-            return Ok(list_of_events)
-
-        except Exception as exc:
-            logger.error(f"Error in save_or_resolve: {exc}", exc_info=True)
-            return Err(
-                ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+        if list_of_conflicted_events:
+            logger.info(
+                "Resolving %d conflicted events after IntegrityError",
+                len(list_of_conflicted_events),
             )
+            canonical_events = await self.resolve_this_events(list_of_conflicted_events)
+            if canonical_events.is_err():
+                logger.error(
+                    "Failed to resolve existing events after conflict: %s",
+                    canonical_events.unwrap_err(),
+                )
+                return Err(canonical_events.unwrap_err())
+            res_list = canonical_events.unwrap()
+            if len(res_list) != len(list_of_conflicted_events):
+                logger.error(
+                    "Could not fully resolve existing events after conflict: expected %d, got %d",
+                    len(list_of_conflicted_events),
+                    len(res_list),
+                )
+                return Err(
+                    ErrorDetail(
+                        error=ErrorCatalog.RUNTIME_FAILED.value,
+                        detail="Conflict detected but existing events could not be fully resolved",
+                    )
+                )
+            list_of_events.extend(res_list)
+
+        return Ok(list_of_events)
 
     # -------------------------------------------------------------------------
     # Helper: Resolve existing event after conflict
@@ -299,7 +318,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             return Ok(list(result.scalars().all()))
 
         except Exception:
-            logger.debug(
+            logger.error(
                 "Failed to eager-load transitions; continuing without load",
                 exc_info=True,
             )

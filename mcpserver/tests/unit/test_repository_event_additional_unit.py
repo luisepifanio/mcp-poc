@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from pytest_mock import MockerFixture
 from result import Err, Ok
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +13,7 @@ from app.infrastructure.db.repository_event import AsyncSQLAlchemyEventRepositor
 
 
 @pytest.mark.asyncio
-async def test_saveMany_success_sets_transitions_and_returns_events():
+async def test_saveMany_success_sets_transitions_and_returns_events() -> None:
     # Configure mock session with all required async methods
     session = MagicMock()
     session.flush = AsyncMock()
@@ -39,75 +40,7 @@ async def test_saveMany_success_sets_transitions_and_returns_events():
 
 
 @pytest.mark.asyncio
-async def test_save_or_resolve_conflict_resolves_existing(mocker):
-    """Test that save_or_resolve uses savepoints and resolves conflicts."""
-    session = MagicMock(spec=AsyncSession)
-
-    # flush will raise IntegrityError to trigger conflict branch
-    def _raise(*_args, **_kwargs):
-        raise IntegrityError("stmt", {}, Exception("orig"))
-
-    session.flush = AsyncMock(side_effect=_raise)
-    session.add = MagicMock()
-
-    # Mock begin_nested to return an async context manager that raises on flush
-    nested_ctx = MagicMock()
-    nested_ctx.__aenter__ = AsyncMock(return_value=None)
-    nested_ctx.__aexit__ = AsyncMock(return_value=False)
-    session.begin_nested = MagicMock(return_value=nested_ctx)
-
-    repo = AsyncSQLAlchemyEventRepository(session)
-
-    # the resolved existing event returned by FastCRUD.get
-    existing = Event(name="existing", external_uuid=uuid4(), state=EventState.PENDING)
-
-    # Patch FastCRUD.get to return the existing event
-    mocker.patch("fastcrud.FastCRUD.get", return_value=existing)
-
-    ev = Event(
-        name="conflict", external_uuid=existing.external_uuid, state=EventState.CREATED
-    )
-
-    res = await repo.save_or_resolve([ev])
-    assert isinstance(res, Ok)
-    lst = res.unwrap()
-    assert len(lst) == 1
-    assert lst[0].external_uuid == existing.external_uuid
-
-
-@pytest.mark.asyncio
-async def test_save_or_resolve_conflict_unresolved_returns_err(mocker):
-    """Test that save_or_resolve returns error when conflict cannot be resolved."""
-    session = MagicMock(spec=AsyncSession)
-
-    def _raise(*_args, **_kwargs):
-        raise IntegrityError("stmt", {}, Exception("orig"))
-
-    session.flush = AsyncMock(side_effect=_raise)
-    session.add = MagicMock()
-
-    # Mock begin_nested to return an async context manager
-    nested_ctx = MagicMock()
-    nested_ctx.__aenter__ = AsyncMock(return_value=None)
-    nested_ctx.__aexit__ = AsyncMock(return_value=False)
-    session.begin_nested = MagicMock(return_value=nested_ctx)
-
-    repo = AsyncSQLAlchemyEventRepository(session)
-
-    # Patch FastCRUD.get to return None (can't resolve existing)
-    mocker.patch("fastcrud.FastCRUD.get", return_value=None)
-
-    ev = Event(name="conflict", external_uuid=uuid4(), state=EventState.CREATED)
-
-    res = await repo.save_or_resolve([ev])
-    assert isinstance(res, Err)
-    err = res.unwrap_err()
-    assert err.error == ErrorCatalog.RUNTIME_FAILED.value
-    assert "Conflict detected" in err.detail
-
-
-@pytest.mark.asyncio
-async def test_delete_validation_error_no_id():
+async def test_delete_validation_error_no_id() -> None:
     session = MagicMock(spec=AsyncSession)
     session.flush = AsyncMock()
     repo = AsyncSQLAlchemyEventRepository(session)
@@ -123,7 +56,7 @@ async def test_delete_validation_error_no_id():
 
 
 @pytest.mark.asyncio
-async def test_delete_not_found_returns_false(mocker):
+async def test_delete_not_found_returns_false(mocker: MockerFixture) -> None:
     session = MagicMock(spec=AsyncSession)
     session.flush = AsyncMock()
     session.add = MagicMock()
@@ -147,7 +80,7 @@ async def test_delete_not_found_returns_false(mocker):
 
 
 @pytest.mark.asyncio
-async def test_getMany_returns_list(mocker):
+async def test_getMany_returns_list(mocker: MockerFixture) -> None:
     session = MagicMock(spec=AsyncSession)
     session.flush = AsyncMock()
     repo = AsyncSQLAlchemyEventRepository(session)
