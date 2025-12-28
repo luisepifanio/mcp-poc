@@ -2,7 +2,7 @@ import logging
 
 # Get a logger for this module
 from collections.abc import AsyncGenerator, Callable
-from typing import AsyncContextManager, cast
+from typing import cast
 from uuid import UUID
 
 import pytest
@@ -62,7 +62,7 @@ async def events_in_db(dbsession: AsyncSession) -> AsyncGenerator[list[Event], N
 
 @pytest.mark.asyncio
 async def test_save_or_resolve_one(
-    uow_factory: Callable[[], AsyncContextManager[UnitOfWork]],
+    uow_factory: Callable[[], AsyncGenerator[UnitOfWork, None]],
     events_in_db: list[Event],
 ) -> None:
     async with uow_factory() as uow:

@@ -1,7 +1,7 @@
 import logging
 import os
-from collections.abc import AsyncGenerator
-from typing import Any, Callable, Optional
+from collections.abc import AsyncGenerator, Callable
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -123,7 +123,7 @@ async def uow_factory(async_session_local: Any) -> Callable[..., Any]:
     AsyncSessionLocal = async_session_local
 
     @asynccontextmanager
-    async def _uow(session: Optional[AsyncSession] = None) -> AsyncGenerator[Any, None]:
+    async def _uow(session: AsyncSession | None = None) -> AsyncGenerator[Any, None]:
         if session is None:
             async with AsyncSessionLocal() as session:
                 async with AsyncSQLAlchemyUnitOfWork(session) as uow:

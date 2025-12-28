@@ -28,13 +28,13 @@ def uow_factory():
 def uow_mock() -> MagicMock:
     """
     Proporciona un mock de UnitOfWork completamente configurado para tests unitarios.
-    
+
     El mock simula:
     - El comportamiento del context manager (async with)
     - Método save_or_resolve() para eventos
     - Métodos de lookup (getOne, get_by_external_uuid, etc.)
     - Comportamiento automático de context manager
-    
+
     Uso típico:
         @pytest.mark.asyncio
         async def test_enqueue_event(uow_mock):
@@ -48,7 +48,7 @@ def uow_mock() -> MagicMock:
     from app.core.unit_of_work import UnitOfWork
 
     mock = MagicMock(spec=UnitOfWork)
-    
+
     # Configurar repositorio de eventos con métodos esenciales
     mock.events = MagicMock()
     mock.events.save_or_resolve = AsyncMock()
@@ -56,9 +56,9 @@ def uow_mock() -> MagicMock:
     mock.events.getOne = AsyncMock()
     mock.events.get_by_external_uuid = AsyncMock()
     mock.events.getMany = AsyncMock()
-    
+
     # Configurar como async context manager
     mock.__aenter__ = AsyncMock(return_value=mock)
     mock.__aexit__ = AsyncMock(return_value=None)
-    
+
     return mock

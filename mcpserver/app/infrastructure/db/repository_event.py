@@ -246,16 +246,11 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         try:
             if not self.session.object_session(event):
                 event = await self.session.merge(event)
-                await self.session.refresh(event, attribute_names=["transitions"])
 
             self.session.add(event)
             await self.session.flush()
 
-            # ensure transitions collection exists
-            if getattr(event, "transitions", None) is None:
-                event.transitions = []
-
-            # Properly build and execute a SELECT to eager-load transitions
+            # Eager-load transitions using SELECT
             query = (
                 select(Event)
                 .where(Event.id == event.id)
@@ -271,6 +266,9 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                 event.id,
                 event.external_uuid,
             )
+
+            # Rollback the failed transaction before attempting to resolve
+            await self.session.rollback()
 
             resolved: Result[list[Event], ErrorDetail] = await self.resolve_this_events(
                 [event]

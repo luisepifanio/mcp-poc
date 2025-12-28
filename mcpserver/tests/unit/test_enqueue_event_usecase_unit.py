@@ -18,7 +18,7 @@ from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
-from result import Ok
+from result import Ok, Result
 
 from app.core.entities import Event, EventState
 from app.core.usecases.event_usecases import (
@@ -26,7 +26,7 @@ from app.core.usecases.event_usecases import (
     EnqueuedEventUseCaseOutput,
     EnqueueEventUseCase,
 )
-from app.errors import ErrorCatalog
+from app.errors import ErrorCatalog, ErrorDetail
 
 
 @pytest.mark.asyncio
@@ -72,9 +72,7 @@ async def test_u1_valid_input_new_event(uow_mock: MagicMock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_u2_invalid_pydantic_input_missing_name(
-    uow_mock: MagicMock,
-) -> None:
+async def test_u2_invalid_pydantic_input_missing_name() -> None:
     """
     U2: Input with missing required name
 
@@ -84,16 +82,14 @@ async def test_u2_invalid_pydantic_input_missing_name(
     """
     with pytest.raises(ValidationError) as exc_info:
         EnqueuedEventUseCaseInput(payload={"key": "value"})  # type: ignore
-    
+
     # Verify error message contains field information
     assert "name" in str(exc_info.value).lower()
     assert "required" in str(exc_info.value).lower()
 
 
 @pytest.mark.asyncio
-async def test_u2_invalid_pydantic_input_oversized_name(
-    uow_mock: MagicMock,
-) -> None:
+async def test_u2_invalid_pydantic_input_oversized_name() -> None:
     """
     U2: Input with name exceeding max_length
 
@@ -106,9 +102,12 @@ async def test_u2_invalid_pydantic_input_oversized_name(
             name="x" * 101,  # Exceeds max_length=100
             payload={"key": "value"},
         )
-    
+
     # Verify error message contains string length validation
-    assert "string_too_long" in str(exc_info.value).lower() or "at most 100" in str(exc_info.value).lower()
+    assert (
+        "string_too_long" in str(exc_info.value).lower()
+        or "at most 100" in str(exc_info.value).lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -170,7 +169,7 @@ async def test_u3_invalid_state_processing(uow_mock: MagicMock) -> None:
     assert "PROCESSING" in error.detail
     assert "Invalid initial state" in error.detail
     assert "Only CREATED or None are allowed" in error.detail
-    
+
     # Verificar que el mock NO fue llamado (validación antes de UoW)
     uow_mock.events.save_or_resolve_one.assert_not_called()
 
@@ -282,7 +281,7 @@ async def test_u5_event_defaults_to_created_state(
     """
 
     # Setup
-    def save_or_resolve_one_side_effect(event):
+    def save_or_resolve_one_side_effect(event: Event) -> Result[Event, ErrorDetail]:
         # Verify event has CREATED state
         assert event.state == EventState.CREATED
         return Ok(event)

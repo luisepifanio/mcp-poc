@@ -1,4 +1,3 @@
-from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -2,8 +2,8 @@ import logging
 
 # Get a logger for this module
 from collections.abc import AsyncGenerator, Callable
-from typing import AsyncContextManager, cast
-from uuid import UUID, uuid4
+from typing import cast
+from uuid import uuid4
 
 import pytest
 from result import Ok
@@ -70,7 +70,7 @@ async def events_in_db(dbsession: AsyncSession) -> AsyncGenerator[list[Event], N
 
 @pytest.mark.asyncio
 async def test_save_or_resolve_does_not_overwrite_relationship_internals(
-    uow_factory: Callable[[], AsyncContextManager[UnitOfWork]],
+    uow_factory: Callable[[], AsyncGenerator[UnitOfWork, None]],
     events_in_db: list[Event],
 ) -> None:
     """Regression test: ensure save_or_resolve does not overwrite relationship internals

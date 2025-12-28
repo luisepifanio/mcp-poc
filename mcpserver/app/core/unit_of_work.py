@@ -1,4 +1,4 @@
-from typing import Protocol, TypeVar, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from .repositories import CourseRepository
 from .repository_event import EventRepository

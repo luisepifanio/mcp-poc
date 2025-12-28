@@ -140,7 +140,12 @@ class EnqueueEventUseCase(
             normalized_payload = self._normalize_json(input.payload)
             normalized_context = self._normalize_json(input.context)
 
+            # Auto-generate UUID if not provided (analogous to database autoincrement)
+            # This respects the Pydantic default_factory=uuid4 in EnqueuedEventUseCaseInput
+            event_id = input.id if input.id is not None else uuid4()
+
             evt = Event(
+                id=event_id,
                 name=input.name,
                 external_uuid=input.external_uuid,
                 payload=normalized_payload or {},

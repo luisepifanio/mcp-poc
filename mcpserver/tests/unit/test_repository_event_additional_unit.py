@@ -4,7 +4,6 @@ from uuid import uuid4
 import pytest
 from pytest_mock import MockerFixture
 from result import Err, Ok
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.entities import Event, EventState

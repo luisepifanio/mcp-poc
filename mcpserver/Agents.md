@@ -124,22 +124,26 @@ mcpserver/
 Este proyecto sigue un workflow estructurado que garantiza calidad, trazabilidad y estabilidad:
 
 1. **Definición de Requerimientos**
+
    - Documentar claramente la funcionalidad o problema a resolver
    - Definir criterios de aceptación y casos de uso
    - Mínima documentación suficiente para describir el funcionamiento de la unidad
 
 2. **Solution Design** (Features nuevas)
+
    - Documentar arquitectura y decisiones técnicas
    - Usar diagramas Mermaid/Markdown en comments o archivos `.md` cuando sea necesario
    - Definir contratos (interfaces, DTOs, tipos)
    - Colaboración Ingeniero-Agente en diseño de solución
 
 3. **Desarrollo e Implementación**
+
    - Implementar código siguiendo principios de Clean Architecture
    - Aplicar **Inyección de Dependencias** en todos los componentes
    - Mantener separación estricta de capas (core/infrastructure)
 
 4. **Testing Validatorio**
+
    - Generar pruebas de bajo costo para validación rápida
    - Tests unitarios con **dependencias mockeadas** (inyección de mocks)
    - Tests funcionales con dependencias reales cuando sea necesario
@@ -197,6 +201,7 @@ Este proyecto sigue un workflow estructurado que garantiza calidad, trazabilidad
 **Razón**: El código en `app/` es el que se containeriza y despliega en producción. Las dependencias de testing (`pytest`, `unittest.mock`, `pytest-mock`, etc.) no deben estar presentes en runtime.
 
 **Prohibido en `app/`**:
+
 ```python
 # ❌ INCORRECTO - No importar en código de producción
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -221,16 +226,18 @@ else:
 Si el constructor define `self.session: AsyncSession = session`, el código debe confiar en ese contrato. No contaminar producción con lógica para detectar mocks.
 
 **Alternativas correctas**:
+
 - **Confiar en el contrato de tipos**: El código asume que recibe el tipo correcto. Si falla, usar try/except como fallback genérico.
 - **Mocks completos en tests**: Los tests unitarios deben configurar mocks que simulen el comportamiento real completo.
 - **Inyección de dependencias**: Para comportamientos alternativos, inyectar estrategias o factories.
 
 **Ejemplo correcto en producción**:
+
 ```python
 class AsyncSQLAlchemyEventRepository:
     def __init__(self, session: AsyncSession):
         self.session: AsyncSession = session  # Contrato: siempre AsyncSession
-    
+
     async def _eager_load_transitions(self, events: list[Event]) -> list[Event]:
         # ✅ CORRECTO: Código puro, sin checks de tipo
         try:
@@ -242,6 +249,7 @@ class AsyncSQLAlchemyEventRepository:
 ```
 
 **Ejemplo correcto en tests**:
+
 ```python
 # ✅ CORRECTO: Mock configura comportamiento completo
 session = MagicMock()
@@ -257,17 +265,20 @@ repo = AsyncSQLAlchemyEventRepository(session)
 
 #### Linting y Formatting
 
-Este proyecto usa **Ruff** como linter y formatter unificado:
+Este proyecto usa **Ruff** como linter y formatter unificado. **Es OBLIGATORIO que el código pase Ruff antes de commit/push**.
 
 ```bash
 # Ejecutar linting
 uv run ruff check .
 
-# Auto-fix problemas corregibles
+# Auto-fix problemas corregibles (recomendado primero)
 uv run ruff check --fix .
 
-# Format código
+# Format código (asegura consistencia)
 uv run ruff format .
+
+# Combo recomendado: Fix + Format + Lint (en ese orden)
+uv run ruff check --fix . && uv run ruff format . && uv run ruff check .
 ```
 
 **Configuración (pyproject.toml)**:
@@ -276,14 +287,67 @@ uv run ruff format .
 - Target: Python 3.12
 - Reglas activas: E (pycodestyle errors), W (warnings), F (pyflakes), I (isort), B (bugbear), C4 (comprehensions), UP (pyupgrade)
 
+**Decisiones de Diseño Reflejadas en Ruff**:
+
+- **Auto-generated UUIDs**: Cuando un campo UUID es `None`, se auto-genera usando `uuid4()`. El linter asegura que la lógica sea explícita (no confiamos en defaults implícitos en construcción de entidades).
+  
+  **Patrón correcto**:
+  ```python
+  # En Pydantic Input DTO
+  class MyInput(BaseModel):
+      id: UUID | None = Field(default_factory=uuid4)  # ✅ Generación explícita
+  
+  # En Use Case
+  event_id = input.id if input.id is not None else uuid4()  # ✅ Fallback explícito
+  evt = Event(id=event_id, ...)  # ✅ Contrato claro
+  ```
+
 #### Type Checking
 
+Este proyecto usa **mypy** en **modo estricto**. **Es OBLIGATORIO que el código pase mypy antes de commit/push**.
+
 ```bash
-# Ejecutar mypy
+# Ejecutar type checking
 uv run mypy app
+
+# Ver errores con códigos de error específicos
+uv run mypy app --show-error-codes
+
+# Verificar en un archivo específico
+uv run mypy app/core/entities.py
 ```
 
-Configuración: `strict = true` (modo estricto habilitado)
+**Configuración (pyproject.toml)**:
+
+- `strict = true` (modo estricto habilitado - requiere type hints completos)
+- `warn_unused_ignores = true` (advierte sobre # type: ignore innecesarios)
+- `disallow_incomplete_defs = true` (todas las funciones deben tener type hints)
+- `disallow_untyped_defs = true` (funciones no tipadas son errores)
+
+**Decisiones de Diseño Reflejadas en mypy**:
+
+- **Type Safety en Inyección de Dependencias**: Las dependencias se especifican con tipos concretos, nunca `Any`. Esto asegura que los mocks en tests cumplan el contrato.
+  
+  **Patrón correcto**:
+  ```python
+  # ✅ Tipos concretos en constructor
+  class EnqueueEventUseCase(AsyncUseCase[EnqueuedEventUseCaseInput, EnqueuedEventUseCaseOutput]):
+      def __init__(self, uow: IUnitOfWork) -> None:
+          self.uow: IUnitOfWork = uow
+  
+  # ❌ Nunca usar Any
+  def __init__(self, uow: Any) -> None:  # INCORRECTO
+      self.uow = uow
+  ```
+
+- **Result Type para Errores**: Los use cases retornan `Result[OutputType, ErrorType]`, no excepciones. Esto es validado por mypy.
+  
+  **Patrón correcto**:
+  ```python
+  async def execute(self, input: Input) -> Result[Output, ErrorDetail]:
+      # mypy asegura que retornes Ok(output) o Err(error)
+      return Ok(output) or Err(error)
+  ```
 
 ---
 
@@ -457,12 +521,12 @@ async def test_enqueue_event_valid_input(uow_mock):
     uow_mock.events.save_or_resolve = AsyncMock(
         return_value=Ok([Event(...)])
     )
-    
+
     # Execute: Llamar use case con mock
     use_case = EnqueueEventUseCase(uow=uow_mock)
     input_data = EnqueuedEventUseCaseInput(name="TestEvent")
     result = await use_case.execute(input_data)
-    
+
     # Assert: Validar output y comportamiento
     assert result.is_ok()
     output = result.unwrap()
@@ -534,7 +598,7 @@ from unittest.mock import AsyncMock, MagicMock
 def uow_mock() -> MagicMock:
     """
     Proporciona un mock de UnitOfWork completamente configurado.
-    
+
     Simula:
     - El comportamiento del context manager (async with)
     - Método save_or_resolve() para eventos
@@ -542,17 +606,17 @@ def uow_mock() -> MagicMock:
     - Rollback automático en error
     """
     mock = MagicMock(spec=UnitOfWork)
-    
+
     # Configurar repositorio de eventos
     mock.events = MagicMock()
     mock.events.save_or_resolve = AsyncMock()
     mock.events.getOne = AsyncMock()
     mock.events.get_by_external_uuid = AsyncMock()
-    
+
     # Configurar como async context manager
     mock.__aenter__ = AsyncMock(return_value=mock)
     mock.__aexit__ = AsyncMock(return_value=None)
-    
+
     return mock
 ```
 
@@ -565,13 +629,13 @@ async def test_use_case_with_mock(uow_mock):
     uow_mock.events.save_or_resolve = AsyncMock(
         return_value=Ok([event_entity])
     )
-    
+
     # Inyectar mock en use case
     use_case = EnqueueEventUseCase(uow=uow_mock)
-    
+
     # Ejecutar
     result = await use_case.execute(input_data)
-    
+
     # Validar interacción
     assert result.is_ok()
     uow_mock.events.save_or_resolve.assert_called_once()
@@ -830,6 +894,7 @@ repos:
 **Política**: Todos los tests deben pasar antes de realizar un commit o push. Esta regla será enforced automáticamente una vez implementados los pre-commit hooks.
 
 **Verificación manual (hasta que pre-commit esté implementado)**:
+
 ```bash
 # Antes de commit
 uv run ruff check . && uv run pytest -q

@@ -21,7 +21,7 @@ async def test_redis_communication() -> None:
     """Tests the full message flow using the in-memory TestRedisBroker."""
 
     # Use TestApp and TestRedisBroker as context managers
-    async with TestRedisBroker(broker) as test_broker, TestApp(app) as test_app:
+    async with TestRedisBroker(broker) as test_broker, TestApp(app):
         # The broker here is an in-memory patched version
         # test_broker: TestRedisBroker = test_app.broker # type: ignore
 
