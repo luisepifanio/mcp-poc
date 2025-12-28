@@ -4,7 +4,7 @@
 | **Description**  | Backend Python con Clean Architecture, testing con pytest y CI/CD con GitHub Actions. Parte de un proyecto monorepo. |
 | **Domain**       | Backend Service                                                                                                      |
 | **Collection**   | Monorepo MCP POC                                                                                                     |
-| **Last Updated** | 2025-12-27                                                                                                           |
+| **Last Updated** | 2025-12-28                                                                                                           |
 
 ---
 
@@ -49,6 +49,17 @@ uv run pytest
 ### Principios Core
 
 - **Clean Architecture**: 3 capas (core/domain → usecases → infrastructure)
+- **SOLID Principles**: Aplicados consistentemente en todo el diseño
+  - Single Responsibility: Cada clase/módulo tiene una única razón para cambiar
+  - Open/Closed: Abierto para extensión, cerrado para modificación
+  - Liskov Substitution: Implementaciones intercambiables vía interfaces ABC
+  - Interface Segregation: Interfaces específicas, no monolíticas
+  - Dependency Inversion: Dependencias hacia abstracciones (ABC), no concretas
+- **"Lo que no está, no falla"**: Mantener solo código esencial y utilizado
+  - Eliminar código muerto agresivamente (funciones, clases, helpers no usados)
+  - Priorizar simplicidad sobre "por si acaso"
+  - Cada línea debe justificar su existencia con uso real
+  - Code reviews deben cuestionar: "¿Se usa esto? ¿Es esencial?"
 - **Dependency Injection**: Dependencias inyectadas, nunca instanciadas en componentes
 - **Type Safety**: Tipos explícitos en TODO, mypy strict mode
 - **Testing First**: Unit + Functional tests, mínimo 75% coverage
@@ -667,6 +678,133 @@ async def execute(self, input: Input) -> Result[Output, Error]:
 
 ---
 
+## 🎯 Principio: "Lo que no está, no falla"
+
+Este principio guía fundamental busca mantener el codebase minimalista, mantenible y libre de código muerto.
+
+### Por qué es importante
+
+- **Menos bugs**: Código no usado no puede fallar en producción
+- **Mantenibilidad**: Menos código = menos que entender, probar y mantener
+- **Claridad**: Elimina confusión sobre qué código está activo
+- **Performance**: Sin overhead de código nunca ejecutado
+- **Coverage real**: Métricas de cobertura más significativas
+
+### Cómo aplicarlo
+
+#### 1. **Antes de agregar código, preguntarse:**
+
+- ¿Este código se usa ahora, no "podría usarse después"?
+- ¿Existe un requerimiento específico que justifique su existencia?
+- ¿Hay tests que demuestren su uso?
+
+#### 2. **Durante code reviews:**
+
+```python
+# ❌ MALO: Métodos "por si acaso"
+class EventRepository:
+    async def get_by_name(self, name: str):  # Nunca usado
+        pass
+
+    async def get_by_date_range(self, start, end):  # Nunca usado
+        pass
+
+    async def get_by_id(self, id: UUID):  # ✅ Usado
+        pass
+
+# ✅ BUENO: Solo métodos requeridos
+class EventRepository:
+    async def get_by_id(self, id: UUID):  # ✅ Usado por UseCases
+        pass
+```
+
+#### 3. **Refactoring agresivo:**
+
+```python
+# ANTES: Helpers privados no usados
+class AsyncSQLAlchemyEventRepository:
+    async def _resolve_existing_event(self, event):  # ❌ Nunca llamado
+        ...
+
+    async def _select_event_by_id(self, id):  # ❌ Nunca llamado
+        ...
+
+    async def _coerce_to_event(self, found):  # ❌ Nunca llamado
+        ...
+
+    async def save(self, event):  # ✅ Usado
+        ...
+
+# DESPUÉS: Solo helpers utilizados
+class AsyncSQLAlchemyEventRepository:
+    async def _ensure_transitions_collection(self, event):  # ✅ Usado en save
+        ...
+
+    async def save(self, event):  # ✅ Usado
+        self._ensure_transitions_collection(event)
+        ...
+```
+
+#### 4. **Detectar código muerto:**
+
+```bash
+# Usar grep para buscar referencias
+grep -r "nombre_funcion" app/ tests/
+
+# Si solo aparece en definición → código muerto
+# Ejemplo real de este proyecto (~80 líneas eliminadas):
+# - _resolve_existing_event: 0 usos
+# - _select_event_by_external_uuid: 0 usos
+# - _select_event_by_id: 0 usos
+# - _coerce_to_event: 0 usos
+```
+
+#### 5. **Interfaces limpias:**
+
+```python
+# ❌ MALO: Interfaz con métodos no implementados
+class EventRepository(ABC):
+    @abstractmethod
+    async def archive(self, event): pass  # Nunca implementado
+
+    @abstractmethod
+    async def restore(self, event): pass  # Nunca implementado
+
+# ✅ BUENO: Solo contratos realmente necesarios
+class EventRepository(ABC):
+    @abstractmethod
+    async def delete(self, event): pass  # Implementado y usado
+
+    @abstractmethod
+    async def save(self, event): pass  # Implementado y usado
+```
+
+### Red flags (señales de código a eliminar)
+
+- ❌ Función sin tests → Probablemente no usada
+- ❌ Método privado sin llamadas internas → Código muerto
+- ❌ Parámetro nunca accedido → Sobrecarga innecesaria
+- ❌ Comentario "TODO: Usar esto después" > 1 mes → No se necesita
+- ❌ Import nunca usado → Ruff lo detecta automáticamente
+- ❌ Clase con coverage 0% → Revisar si es necesaria
+
+### Métricas de éxito
+
+- **Coverage aumenta** al eliminar código muerto (0% coverage)
+- **Menos líneas de código** para misma funcionalidad
+- **Tests más enfocados** en código que realmente importa
+- **Code reviews más rápidos** al haber menos qué revisar
+
+### Ejemplo real de este proyecto
+
+**Commit**: `refactor(repository): clean up AsyncSQLAlchemyEventRepository`
+
+- ❌ Eliminados: 4 métodos privados (~80 líneas) nunca usados
+- ✅ Resultado: Coverage subió de 78% a 87% (+9%)
+- ✅ Beneficio: Código más claro sin sobrecarga
+
+---
+
 ## 🐛 Troubleshooting
 
 ### Problema: Tests fallan con `ModuleNotFoundError`
@@ -869,14 +1007,15 @@ git push
 
 ## 🔐 Common Pitfalls & How to Avoid
 
-| Pitfall                           | Síntoma                                 | Solución                                                                |
-| --------------------------------- | --------------------------------------- | ----------------------------------------------------------------------- |
-| **No inyectar dependencias**      | Tests imposibles de mockear             | Siempre pasar dependencias al `__init__`, nunca instanciar internamente |
-| **Imports en app/ desde testing** | `unittest.mock` importado en producción | NUNCA importar testing libs en `app/`. Usar mocks solo en `tests/`      |
-| **Type hints incompletos**        | mypy falla                              | Especificar tipos explícitos en TODAS las funciones públicas            |
-| **Tests flaky (aleatorios)**      | Tests fallan a veces                    | Evitar `time.sleep()`, usar fixtures determinísticas                    |
-| **BD no limpias entre tests**     | Tests interfieren entre sí              | Usar fixture de BD en memoria que se reinicia cada test                 |
-| **Coverage drops**                | Métodos nuevos sin tests                | Escribir tests ANTES de mergear (o al menos junto con código)           |
+| Pitfall                           | Síntoma                                 | Solución                                                                  |
+| --------------------------------- | --------------------------------------- | ------------------------------------------------------------------------- |
+| **No inyectar dependencias**      | Tests imposibles de mockear             | Siempre pasar dependencias al `__init__`, nunca instanciar internamente   |
+| **Imports en app/ desde testing** | `unittest.mock` importado en producción | NUNCA importar testing libs en `app/`. Usar mocks solo en `tests/`        |
+| **Type hints incompletos**        | mypy falla                              | Especificar tipos explícitos en TODAS las funciones públicas              |
+| **Tests flaky (aleatorios)**      | Tests fallan a veces                    | Evitar `time.sleep()`, usar fixtures determinísticas                      |
+| **BD no limpias entre tests**     | Tests interfieren entre sí              | Usar fixture de BD en memoria que se reinicia cada test                   |
+| **Coverage drops**                | Métodos nuevos sin tests                | Escribir tests ANTES de mergear (o al menos junto con código)             |
+| **Código muerto acumulado**       | Coverage bajo, código sin tests         | Aplicar "lo que no está no falla": eliminar código no usado agresivamente |
 
 ---
 
@@ -885,7 +1024,7 @@ git push
 ### Tests Coverage
 
 - ✅ **60 tests passing** (58 unit + functional, 2 skipped)
-- ✅ **83% coverage** (target: ≥75%)
+- ✅ **87% coverage** (target: ≥75%)
 - ✅ Unit tests: 41 tests
 - ✅ Functional tests: 17 tests
 - ✅ Concurrency tests: 3 tests (C1: external_uuid, C2: internal id, C3: mixed)
@@ -916,9 +1055,11 @@ git push
 
 4. **Tests = Documentación**: Un buen test describe cómo usar la funcionalidad. Leerlos para entender el proyecto.
 
-5. **Concurrency es Explicito**: `asyncio.gather()` + `save_or_resolve_one()` = Idempotencia garantizada.
+5. **"Lo que no está, no falla"**: Eliminar código muerto agresivamente. Solo mantener lo esencial y utilizado.
 
-6. **Quality Gates Antes de Commit**: Ruff + mypy + pytest. Sin pasar estos, no mergear.
+6. **Concurrency es Explícito**: `asyncio.gather()` + `save_or_resolve_one()` = Idempotencia garantizada.
+
+7. **Quality Gates Antes de Commit**: Ruff + mypy + pytest. Sin pasar estos, no mergear.
 
 ---
 
@@ -954,12 +1095,13 @@ Si estás implementando una feature:
 
 ## 📝 Document Versioning
 
-| Versión | Fecha      | Cambios                                                                                                                                                |
-| ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| v2.0    | 2025-12-27 | **Complete rewrite**: Reorganizado para ser más practico y repetible. Added concurrency patterns, simplified commands, added typical workflow example. |
-| v1.0    | 2024-12-10 | Versión inicial                                                                                                                                        |
+| Versión | Fecha      | Cambios                                                                                                                                                                                            |
+| ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v2.1    | 2025-12-28 | **Added "Lo que no está, no falla" principle**: Agregado como principio core con sección dedicada, ejemplos prácticos, red flags y métricas de éxito. Incluido en Common Pitfalls y Key Takeaways. |
+| v2.0    | 2025-12-27 | **Complete rewrite**: Reorganizado para ser más práctico y repetible. Added concurrency patterns, simplified commands, added typical workflow example. Agregados principios SOLID explícitamente.  |
+| v1.0    | 2024-12-10 | Versión inicial                                                                                                                                                                                    |
 
 ---
 
-**Última actualización**: 2025-12-27
+**Última actualización**: 2025-12-28
 **Próxima revisión**: Después de implementar C3 (mixed concurrency scenarios)
