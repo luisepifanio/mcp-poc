@@ -73,9 +73,9 @@ uv run pytest
 app/
 ├── core/                      # 🧠 Lógica de negocio pura
 │   ├── entities.py           # Modelos de dominio
-│   ├── interfaces.py         # Contratos/abstracciones
-│   ├── repositories.py       # Interfaces de repositorios
-│   ├── unit_of_work.py       # Patrón UnitOfWork
+│   ├── repositories.py       # Interfaces ABC de repositorios
+│   ├── repository_event.py   # Interface ABC específica de eventos
+│   ├── unit_of_work.py       # Interface ABC del patrón UnitOfWork
 │   ├── usecase.py            # Clase base para UseCases
 │   ├── usecases/             # Implementaciones de UseCases
 │   │   ├── event_usecases.py
@@ -119,7 +119,7 @@ Este workflow es **REPETIBLE** - cada feature sigue estos pasos:
 
 ```
 - Definir entidades en app/core/entities.py
-- Crear interfaces en app/core/interfaces.py
+- Crear interfaces ABC en app/core/repositories.py o repository_*.py
 - Diseñar contrato del UseCase (Input/Output DTOs)
 ```
 
@@ -586,7 +586,7 @@ INFRASTRUCTURE (SQLAlchemy, FastAPI, Redis, etc.)
 **En nuestro proyecto**:
 
 - `app/core/entities.py` → ENTITIES
-- `app/core/interfaces.py` → INTERFACES
+- `app/core/repositories.py`, `app/core/repository_event.py` → INTERFACES (ABC)
 - `app/core/usecases/` → USE CASES
 - `app/infrastructure/` → INFRASTRUCTURE
 
@@ -595,34 +595,44 @@ INFRASTRUCTURE (SQLAlchemy, FastAPI, Redis, etc.)
 ### Repository Pattern
 
 ```python
-# Interface (app/core/interfaces.py)
-class IRepository(ABC, Generic[T]):
+# Interface (app/core/repository_event.py)
+class EventRepository(ABC):
     @abstractmethod
-    async def save(self, entity: T) -> T:
+    async def save(self, entity: Event) -> Result[Event, ErrorDetail]:
         pass
 
     @abstractmethod
-    async def get_by_id(self, id: UUID) -> T | None:
+    async def get_by_id(self, id: UUID) -> Result[Event, ErrorDetail]:
         pass
 
 # Implementation (app/infrastructure/db/repository_event.py)
-class AsyncSQLAlchemyEventRepository(IRepository[Event]):
+class AsyncSQLAlchemyEventRepository(EventRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def save(self, event: Event) -> Event:
+    async def save(self, event: Event) -> Result[Event, ErrorDetail]:
         self.session.add(event)
         await self.session.flush()
-        return event
+        return Ok(event)
 ```
 
 ### Unit of Work Pattern
 
 ```python
 # Abstraction (app/core/unit_of_work.py)
-class IUnitOfWork(ABC):
+class UnitOfWork(ABC):
+    @property
     @abstractmethod
-    async def __aenter__(self):
+    def courses(self) -> CourseRepository:
+        pass
+
+    @property
+    @abstractmethod
+    def events(self) -> EventRepository:
+        pass
+
+    @abstractmethod
+    async def __aenter__(self) -> "UnitOfWork":
         pass
 
     @abstractmethod
@@ -630,7 +640,7 @@ class IUnitOfWork(ABC):
         pass
 
 # Implementation (app/infrastructure/db/unit_of_work.py)
-class AsyncSQLAlchemyUnitOfWork(IUnitOfWork):
+class AsyncSQLAlchemyUnitOfWork(UnitOfWork):
     def __init__(self, session_factory):
         self.session = None
         self._session_factory = session_factory
@@ -875,7 +885,7 @@ git push
 ### Tests Coverage
 
 - ✅ **60 tests passing** (58 unit + functional, 2 skipped)
-- ✅ **78% coverage** (target: ≥75%)
+- ✅ **83% coverage** (target: ≥75%)
 - ✅ Unit tests: 41 tests
 - ✅ Functional tests: 17 tests
 - ✅ Concurrency tests: 3 tests (C1: external_uuid, C2: internal id, C3: mixed)
@@ -883,7 +893,7 @@ git push
 ### Code Quality
 
 - ✅ **Ruff**: ALL PASSED
-- ✅ **mypy**: strict mode (production code clean)
+- ✅ **mypy**: strict mode (green). Nota: `app/infrastructure/scrapy_spider/**` excluida temporalmente del análisis hasta su reimplementación.
 - ✅ **Pre-commit hooks**: [Pendiente de implementar]
 
 ### Architecture
