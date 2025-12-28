@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import or_, select
 
 from app.core.entities import Event, EventTransition
-from app.core.respository_event import EventRepository
+from app.core.repository_event import EventRepository
 from app.errors import ErrorCatalog, ErrorDetail
 
 logger = logging.getLogger(__name__)
@@ -279,6 +279,13 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             return resolved.and_then(
                 lambda evs: Ok(evs[0])
                 if len(evs) == 1
+                else Err(
+                    ErrorDetail(
+                        error=ErrorCatalog.NOT_FOUND.value,
+                        detail=f"Event with external_uuid {input.external_uuid} not found.",
+                    )
+                )
+                if len(evs) == 0
                 else Err(
                     ErrorDetail(
                         error=ErrorCatalog.RUNTIME_FAILED.value,

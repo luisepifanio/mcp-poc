@@ -1,39 +1,43 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
-from result import Err, Ok
+from result import Err, Ok, Result
 
 from app.core.entities import Event, EventState
-from app.core.respository_event import EventRepository
+from app.core.repository_event import EventRepository
 from app.errors import ErrorDetail
 
 
 class FakeRepo(EventRepository):
-    def __init__(self, many_return):
-        self._many_return = many_return
+    def __init__(self, many_return: Result[list[Event], ErrorDetail]) -> None:
+        self._many_return: Result[list[Event], ErrorDetail] = many_return
 
-    async def delete(self, event: Event, hard: bool = False):
+    async def delete(self, event: Event, hard: bool = False) -> Result[bool, ErrorDetail]:
         return Ok(True)
 
-    async def get_by_external_uuid(self, external_uuid):
+    async def get_by_external_uuid(
+        self, external_uuid: UUID
+    ) -> Result[Event, ErrorDetail]:
         return Err(ErrorDetail(error="NOT_FOUND", detail="not"))
 
-    async def getMany(self, ids: list):
+    async def getMany(self, ids: list[UUID]) -> Result[list[Event], ErrorDetail]:
         return self._many_return
 
-    async def saveMany(self, events: list):
+    async def saveMany(self, events: list[Event]) -> Result[list[Event], ErrorDetail]:
         return self._many_return
 
-    async def save_or_resolve(self, events: list):
+    async def save_or_resolve(
+        self, events: list[Event]
+    ) -> Result[list[Event], ErrorDetail]:
         """Idempotent save - returns saved or existing events."""
         return self._many_return
 
-    async def save_or_resolve_one(self, event: Event) -> Ok[Event] | Err[ErrorDetail]:
+    async def save_or_resolve_one(self, event: Event) -> Result[Event, ErrorDetail]:
         return Ok(event)
 
 
 @pytest.mark.asyncio
-async def test_getone_success_and_failure_cases():
+async def test_getone_success_and_failure_cases() -> None:
     e = Event(name="x", external_uuid=uuid4(), state=EventState.CREATED)
     # success case: getMany returns exactly one
     repo_ok = FakeRepo(Ok([e]))
@@ -53,7 +57,7 @@ async def test_getone_success_and_failure_cases():
 
 
 @pytest.mark.asyncio
-async def test_save_default_logic():
+async def test_save_default_logic() -> None:
     e = Event(name="x", external_uuid=uuid4(), state=EventState.CREATED)
     repo_ok = FakeRepo(Ok([e]))
     res = await repo_ok.save(e)

@@ -4,7 +4,7 @@ import pytest
 from result import Err, Ok
 
 from app.core.entities import Event
-from app.core.respository_event import EventRepository
+from app.core.repository_event import EventRepository
 from app.errors import ErrorCatalog, ErrorDetail
 
 

@@ -122,130 +122,38 @@ class EnqueueEventUseCase(
                 )
             )
 
-        async with self.uow:
-            # CHECK: Is probably better try a direct insert
-            existing_event = (
-                await self.uow.events.get_by_external_uuid(input.external_uuid)
-                if input.external_uuid is not None
-                else await self.uow.events.getOne(input.id)
-                if input.id
-                else Err(
-                    ErrorDetail(
-                        error=ErrorCatalog.NOT_FOUND.value,
-                        detail="No id or external_uuid provided for this event",
-                    )
+        # 2) Extra validations and saving within UoW transaction
+        # Validate allowed enqueue state: only CREATED or None
+        if input.state is not None and input.state is not EventState.CREATED:
+            return Err(
+                ErrorDetail(
+                    error=ErrorCatalog.VALIDATION_FAILED.value,
+                    detail=(
+                        f"Invalid initial state for enqueue: {input.state}. "
+                        "Only CREATED or None are allowed."
+                    ),
                 )
             )
 
-            match existing_event:
-                case Ok(event):
-                    # Event with the same id already exists
-                    return Ok(self.as_output(event))
-                case Err(error_detail) if (
-                    input.name in LOOKUP_EVENT_NAMES
-                    and error_detail.error == ErrorCatalog.NOT_FOUND.value
-                ):
-                    # piece of cake 🎂 , event lookup failed, just return error
-                    return Err(error_detail)
-                case Err(error_detail) if (
-                    error_detail.error == ErrorCatalog.NOT_FOUND.value
-                ):
-                    # Validate allowed enqueue state: only CREATED or None
-                    if input.state is not None and input.state is not EventState.CREATED:
-                        return Err(
-                            ErrorDetail(
-                                error=ErrorCatalog.VALIDATION_FAILED.value,
-                                detail=(
-                                    f"Invalid initial state for enqueue: {input.state}. "
-                                    "Only CREATED or None are allowed."
-                                ),
-                            )
-                        )
+        async with self.uow:
+            # Normalize JSON fields to deterministic representation
+            normalized_payload = self._normalize_json(input.payload)
+            normalized_context = self._normalize_json(input.context)
 
-                    # Normalize JSON fields to deterministic representation
-                    normalized_payload = self._normalize_json(input.payload)
-                    normalized_context = self._normalize_json(input.context)
+            evt = Event(
+                name=input.name,
+                external_uuid=input.external_uuid,
+                payload=normalized_payload or {},
+                context=normalized_context or {},
+                state=input.state or EventState.CREATED,
+            )
 
-                    evt = Event(
-                        name=input.name,
-                        external_uuid=input.external_uuid,
-                        payload=normalized_payload or {},
-                        context=normalized_context or {},
-                        state=input.state or EventState.CREATED,
-                    )
+            op_result = await self.uow.events.save_or_resolve_one(evt)
 
-                    # apply transition to PENDING before saving (this use case only enqueues)
-                    event_result = transition_event(evt, EventState.PENDING)
+            # TODO: Implement transition to PENDING state just after publishing successfully
+            # to redis stream, so for now we keep it as CREATED
 
-                    match event_result:
-                        case Ok(event):
-                            # Use save_or_resolve for idempotent behavior:
-                            # - Uses SAVEPOINTs to isolate each insert
-                            # - On conflict, resolves to existing row without breaking transaction
-                            save_result = await self.uow.events.save_or_resolve([evt])
-                            match save_result:
-                                case Ok(saved_events):
-                                    # save_or_resolve returns a list
-                                    if len(saved_events) != 1:
-                                        return Err(
-                                            ErrorDetail(
-                                                error=ErrorCatalog.RUNTIME_FAILED.value,
-                                                detail=(
-                                                    "Repository returned unexpected number of events"
-                                                ),
-                                            )
-                                        )
-                                    saved_model = saved_events[0]
-
-                                    # Validate output via pydantic before returning
-                                    try:
-                                        out = self.as_output(saved_model)
-                                        RootModel[EnqueuedEventUseCaseOutput](out)
-                                    except ValidationError as exc:
-                                        return Err(
-                                            ErrorDetail(
-                                                error=ErrorCatalog.VALIDATION_FAILED.value,
-                                                detail=str(exc),
-                                            )
-                                        )
-                                    return Ok(out)
-
-                                case Err(err_detail):
-                                    # If integrity/unique constraint, try to return existing canonical entity
-                                    detail_text = (err_detail.detail or "").lower()
-                                    if (
-                                        "unique" in detail_text
-                                        or "constraint" in detail_text
-                                    ):
-                                        # try to find by external_uuid then id
-                                        if evt.external_uuid is not None:
-                                            existing = await self.uow.events.get_by_external_uuid(
-                                                evt.external_uuid
-                                            )
-                                            if isinstance(existing, Ok):
-                                                return Ok(
-                                                    self.as_output(existing.unwrap())
-                                                )
-                                        # fallback to id lookup
-                                        existing = await self.uow.events.getOne(evt.id)
-                                        if isinstance(existing, Ok):
-                                            return Ok(self.as_output(existing.unwrap()))
-                                    return Err(err_detail)
-
-                        case Err(error):
-                            return Err(error)
-                case _:
-                    return Err(
-                        ErrorDetail(
-                            error=ErrorCatalog.RUNTIME_FAILED.value,
-                            detail="🐠 Please check this specific case",
-                            metadata={
-                                "input": RootModel[EnqueuedEventUseCaseInput](
-                                    input
-                                ).model_dump(mode="json")
-                            },
-                        )
-                    )
+            return op_result.and_then(lambda saved_event: Ok(self.as_output(saved_event)))
 
     def as_event_entity(self, input: EnqueuedEventUseCaseInput) -> Event:
         return Event(

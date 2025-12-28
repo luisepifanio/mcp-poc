@@ -10,7 +10,7 @@ from app.core.usecases.course_usecases import GetAsyncCourseUseCase as GetCourse
 from app.core.usecases.course_usecases import GetCourseUseCaseInput
 
 from ..db.connection import get_session
-from ..db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
+from ..db.unit_of_work import AsyncSQLAlchemyUnitOfWork
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ async def get_course(
     if False:
         return query
     else:
-        uow = AsyncSQLAlchwemyUnitOfWork(session)
+        uow = AsyncSQLAlchemyUnitOfWork(session)
         usecase = GetCourseUseCase(uow)
         return await usecase.execute(
             GetCourseUseCaseInput(

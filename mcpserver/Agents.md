@@ -119,6 +119,37 @@ mcpserver/
 
 ## Guías de Desarrollo
 
+### Workflow de Desarrollo
+
+Este proyecto sigue un workflow estructurado que garantiza calidad, trazabilidad y estabilidad:
+
+1. **Definición de Requerimientos**
+   - Documentar claramente la funcionalidad o problema a resolver
+   - Definir criterios de aceptación y casos de uso
+   - Mínima documentación suficiente para describir el funcionamiento de la unidad
+
+2. **Solution Design** (Features nuevas)
+   - Documentar arquitectura y decisiones técnicas
+   - Usar diagramas Mermaid/Markdown en comments o archivos `.md` cuando sea necesario
+   - Definir contratos (interfaces, DTOs, tipos)
+   - Colaboración Ingeniero-Agente en diseño de solución
+
+3. **Desarrollo e Implementación**
+   - Implementar código siguiendo principios de Clean Architecture
+   - Aplicar **Inyección de Dependencias** en todos los componentes
+   - Mantener separación estricta de capas (core/infrastructure)
+
+4. **Testing Validatorio**
+   - Generar pruebas de bajo costo para validación rápida
+   - Tests unitarios con **dependencias mockeadas** (inyección de mocks)
+   - Tests funcionales con dependencias reales cuando sea necesario
+   - Objetivo: alcanzar savepoint estable con tests pasando
+
+5. **Commit y Continuidad**
+   - Una vez tests pasando → commit local (push remoto si es necesario)
+   - Definir siguientes pasos para continuar feature/evolutivo
+   - Iterar desde paso 1 para siguiente incremento
+
 ### Principios de Clean Architecture
 
 1. **Separación de Capas**:
@@ -127,15 +158,24 @@ mcpserver/
    - `infrastructure/`: Implementaciones técnicas (BD, API, scrapers)
    - Las dependencias fluyen de afuera hacia adentro (infrastructure → core)
 
-2. **Inversión de Dependencias**:
+2. **Inversión de Dependencias (Dependency Injection)**:
 
-   - Los use cases dependen de interfaces (abstracciones) definidas en `core/interfaces.py`
+   - **Principio fundamental**: Los use cases y componentes core reciben sus dependencias como parámetros (inyección)
+   - Las dependencias son abstracciones (interfaces) definidas en `core/interfaces.py`
    - Las implementaciones concretas viven en `infrastructure/`
+   - **En testing**: Se inyectan mocks que simulan el comportamiento real
+   - **En producción**: Se inyectan implementaciones concretas (repositorios, servicios)
    - Uso del patrón Repository y Unit of Work para abstraer la persistencia
 
-3. **Testing por Capas**:
-   - **Unit tests**: Validan lógica de negocio aislada con mocks
-   - **Functional tests**: Validan flujos completos con dependencias reales (BD en memoria)
+3. **Testing por Capas con Inyección de Dependencias**:
+   - **Unit tests**: Validan lógica de negocio aislada con **dependencias mockeadas**
+     - Inyectar mocks de UnitOfWork, repositorios, servicios
+     - No requieren conexiones a BD ni servicios externos
+     - Rápidos de ejecutar, validación de lógica pura
+   - **Functional tests**: Validan flujos completos con **dependencias reales**
+     - Inyectar implementaciones reales (BD en memoria, servicios de prueba)
+     - Validan integración entre capas
+     - Prueban comportamiento end-to-end
 
 ### Convenciones de Código
 
@@ -391,6 +431,65 @@ def test_use_case_logic(mocker):
     mock_repository.get_by_id.assert_called_once_with(expected_id)
 ```
 
+#### Tests de Use Cases (`tests/unit/test_*_usecase_unit.py`)
+
+- **Objetivo**: Validar lógica de negocio del use case aislada, con dependencias mockeadas
+- **Características**:
+  - Inyección de dependencias: Mock de `UnitOfWork` y sus repositorios
+  - No requieren conexión real a BD
+  - Validan transformaciones de input → output
+  - Validan manejo de errores sin persistencia
+  - Rápidos de ejecutar
+
+**Principios de Testing de Use Cases**:
+
+1. **Inyección de Dependencias**: El use case debe recibir un mock del `UnitOfWork`
+2. **Contrato de Mocks**: Los mocks deben simular el comportamiento real completo
+3. **Aislamiento Total**: La lógica del use case no debe conocer que trabaja con mocks
+
+**Patrón típico**:
+
+```python
+@pytest.mark.asyncio
+async def test_enqueue_event_valid_input(uow_mock):
+    """Test unitario: input válido → evento en PENDING"""
+    # Setup: Configurar mock de UoW
+    uow_mock.events.save_or_resolve = AsyncMock(
+        return_value=Ok([Event(...)])
+    )
+    
+    # Execute: Llamar use case con mock
+    use_case = EnqueueEventUseCase(uow=uow_mock)
+    input_data = EnqueuedEventUseCaseInput(name="TestEvent")
+    result = await use_case.execute(input_data)
+    
+    # Assert: Validar output y comportamiento
+    assert result.is_ok()
+    output = result.unwrap()
+    assert output.state == EventState.PENDING
+    uow_mock.events.save_or_resolve.assert_called_once()
+```
+
+**Fixture para Mocks de UoW**:
+
+```python
+# En tests/unit/conftest.py
+from unittest.mock import AsyncMock, MagicMock
+from app.core.unit_of_work import UnitOfWork
+
+@pytest.fixture
+def uow_mock() -> MagicMock:
+    """Proporciona un mock de UnitOfWork con métodos del repositorio mockeados"""
+    mock = MagicMock(spec=UnitOfWork)
+    mock.events = MagicMock()
+    mock.events.save_or_resolve = AsyncMock()
+    mock.events.getOne = AsyncMock()
+    mock.events.get_by_external_uuid = AsyncMock()
+    mock.__aenter__ = AsyncMock(return_value=mock)
+    mock.__aexit__ = AsyncMock(return_value=None)
+    return mock
+```
+
 #### Tests Funcionales (`tests/functional/`)
 
 - **Objetivo**: Validar flujos completos end-to-end
@@ -421,6 +520,62 @@ async def test_create_course_functional(async_client, db_session):
 ```
 
 ### Fixtures Importantes
+
+#### Fixture de Mock para UnitOfWork (Unit Tests)
+
+**Ubicación**: `tests/unit/conftest.py`
+
+**Uso**: Para tests unitarios que necesitan inyectar un mock de UnitOfWork
+
+```python
+from unittest.mock import AsyncMock, MagicMock
+
+@pytest.fixture
+def uow_mock() -> MagicMock:
+    """
+    Proporciona un mock de UnitOfWork completamente configurado.
+    
+    Simula:
+    - El comportamiento del context manager (async with)
+    - Método save_or_resolve() para eventos
+    - Métodos de lookup (getOne, get_by_external_uuid, etc.)
+    - Rollback automático en error
+    """
+    mock = MagicMock(spec=UnitOfWork)
+    
+    # Configurar repositorio de eventos
+    mock.events = MagicMock()
+    mock.events.save_or_resolve = AsyncMock()
+    mock.events.getOne = AsyncMock()
+    mock.events.get_by_external_uuid = AsyncMock()
+    
+    # Configurar como async context manager
+    mock.__aenter__ = AsyncMock(return_value=mock)
+    mock.__aexit__ = AsyncMock(return_value=None)
+    
+    return mock
+```
+
+**Ejemplo de uso en test**:
+
+```python
+@pytest.mark.asyncio
+async def test_use_case_with_mock(uow_mock):
+    # Configurar comportamiento específico del mock
+    uow_mock.events.save_or_resolve = AsyncMock(
+        return_value=Ok([event_entity])
+    )
+    
+    # Inyectar mock en use case
+    use_case = EnqueueEventUseCase(uow=uow_mock)
+    
+    # Ejecutar
+    result = await use_case.execute(input_data)
+    
+    # Validar interacción
+    assert result.is_ok()
+    uow_mock.events.save_or_resolve.assert_called_once()
+```
 
 #### Fixture Global de Limpieza de Settings
 

@@ -118,7 +118,7 @@ async def uow_factory(async_session_local: Any) -> Callable[..., Any]:
     """
     from contextlib import asynccontextmanager
 
-    from app.infrastructure.db.unit_of_work import AsyncSQLAlchwemyUnitOfWork
+    from app.infrastructure.db.unit_of_work import AsyncSQLAlchemyUnitOfWork
 
     AsyncSessionLocal = async_session_local
 
@@ -126,10 +126,10 @@ async def uow_factory(async_session_local: Any) -> Callable[..., Any]:
     async def _uow(session: Optional[AsyncSession] = None) -> AsyncGenerator[Any, None]:
         if session is None:
             async with AsyncSessionLocal() as session:
-                async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
+                async with AsyncSQLAlchemyUnitOfWork(session) as uow:
                     yield uow
         else:
-            async with AsyncSQLAlchwemyUnitOfWork(session) as uow:
+            async with AsyncSQLAlchemyUnitOfWork(session) as uow:
                 yield uow
 
     return _uow

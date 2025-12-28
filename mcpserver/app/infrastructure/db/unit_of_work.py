@@ -1,33 +1,60 @@
+from typing import cast
+
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.repositories import CourseRepository
+from app.core.repository_event import EventRepository
 
 from ...core.unit_of_work import UnitOfWork
 from .repository import AsyncSQLAlchemyCourseRepository
 from .repository_event import AsyncSQLAlchemyEventRepository
 
 
-class AsyncSQLAlchwemyUnitOfWork(UnitOfWork):
+class AsyncSQLAlchemyUnitOfWork(UnitOfWork):
     def __init__(self, session: AsyncSession):
-        self.session: AsyncSession | None = None
-        self.__internal_session = session
+        self._session = session
+        self._courses: CourseRepository | None = None
+        self._events: EventRepository | None = None
 
-    async def __aenter__(self) -> "UnitOfWork":
-        self.session = self.__internal_session
-        self.courses = AsyncSQLAlchemyCourseRepository(self.session)
-        self.events = AsyncSQLAlchemyEventRepository(self.session)
+    @property
+    def session(self) -> AsyncSession:
+        assert self._session is not None, "Unit of Work has not been initialized."
+        return self._session
+
+    @property
+    def courses(self) -> CourseRepository:
+        assert self._courses is not None, "Unit of Work has not been initialized."
+        return self._courses
+
+    @property
+    def events(self) -> EventRepository:
+        assert self._events is not None, "Unit of Work has not been initialized."
+        return self._events
+
+    async def __aenter__(self) -> "AsyncSQLAlchemyUnitOfWork":
+        self._courses = AsyncSQLAlchemyCourseRepository(self._session)
+        self._events = AsyncSQLAlchemyEventRepository(self._session)
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: str | None,
+    ) -> None:
         assert self.session is not None
         if exc_type is not None:
             await self.rollback()
         else:
             await self.commit()
-        await self.session.close()
+        await self._session.close()
+        self._courses = None
+        self._events = None
 
-    async def commit(self):
+    async def commit(self) -> None:
         assert self.session is not None
-        await self.session.commit()
+        await self._session.commit()
 
-    async def rollback(self):
+    async def rollback(self) -> None:
         assert self.session is not None
-        await self.session.rollback()
+        await self._session.rollback()
