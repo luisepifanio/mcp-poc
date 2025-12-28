@@ -35,7 +35,7 @@ async def shutdown(context: Any = Context()) -> None:
         min_idle_time=5000,  # Tiempo mínimo de inactividad en milisegundos (5 segundos)
     ),
     ack_policy=AckPolicy.MANUAL,  # Política de reconocimiento manual
-)  # type: ignore[misc]
+)  # type: ignore[untyped-decorator]
 async def handle_incoming_enqueue_event(
     body: dict[str, Any],
     msg: RedisMessage,
@@ -55,8 +55,10 @@ async def handle_incoming_enqueue_event(
         min_idle_time=5000,  # 5 seconds
     ),
     ack_policy=AckPolicy.MANUAL,
-)  # type: ignore[misc]
-@broker.publisher(stream="out-subject")  # <-- listen here  # type: ignore[misc]
+)  # type: ignore[untyped-decorator]
+@broker.publisher(
+    stream="out-subject"
+)  # <-- listen here  # type: ignore[untyped-decorator]
 async def handle_processing_event_queue(
     body: dict[str, Any],
     msg: RedisMessage,

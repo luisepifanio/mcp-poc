@@ -14,9 +14,9 @@ def resolve_env_file() -> str | None:
 
 
 class AppSettings(BaseSettings):
-    env: str
-    database_url: str
-    log_level: str
+    env: str = "development"
+    database_url: str = "sqlite:///./var/lib/database.sqlite"
+    log_level: str = "DEBUG"
 
     model_config = SettingsConfigDict(
         env_file=resolve_env_file(),

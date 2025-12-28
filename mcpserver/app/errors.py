@@ -24,7 +24,7 @@ class ErrorDetailBuilder:
     def __init__(self) -> None:
         self._error: ErrorCatalog | None = None
         self._detail: str | None = None
-        self._metadata: dict = {}
+        self._metadata: JSONDict = {}
 
     def error(self, error: ErrorCatalog) -> "ErrorDetailBuilder":
         self._error = error
@@ -34,7 +34,7 @@ class ErrorDetailBuilder:
         self._detail = detail
         return self
 
-    def metadata(self, metadata: dict) -> "ErrorDetailBuilder":
+    def metadata(self, metadata: JSONDict) -> "ErrorDetailBuilder":
         self._metadata.update(metadata or {})
         return self
 
@@ -54,13 +54,13 @@ class AppError(Exception):
         self,
         message: str,
         error: ErrorCatalog = ErrorCatalog.RUNTIME_FAILED,
-        metadata: dict | None = None,
+        metadata: JSONDict | None = None,
     ):
         # Call the base class constructor with the parameters it needs
         super().__init__(message)
         self._detail = message
         self.error = error
-        self.metadata: dict | None = metadata
+        self.metadata: JSONDict | None = metadata
 
     def as_error_detail(self) -> ErrorDetail:
         """

@@ -24,7 +24,7 @@ def datetime_to_gmt_str(dt: datetime) -> str:
     # return dt.strftime("%Y-%m-%dT%H:%M:%S%z")
 
 
-def enum_values(enum_class: type[enum.Enum]) -> list:
+def enum_values(enum_class: type[enum.Enum]) -> list[str]:
     """Get values for enum."""
     return [status.value for status in enum_class]
 

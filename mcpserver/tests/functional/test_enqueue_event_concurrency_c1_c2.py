@@ -258,9 +258,9 @@ async def test_c3_concurrent_mixed_id_and_external_uuid(
     external_uuids = {r["external_uuid"] for r in results}
 
     assert len(ids) == 1, f"Expected a single event id, got {ids}"
-    assert external_uuids == {
-        shared_external_uuid
-    }, f"Expected external_uuid={shared_external_uuid}, got {external_uuids}"
+    assert external_uuids == {shared_external_uuid}, (
+        f"Expected external_uuid={shared_external_uuid}, got {external_uuids}"
+    )
 
     # Assert: DB contains only one event for that external_uuid
     stmt = select(Event).where(Event.external_uuid == shared_external_uuid)

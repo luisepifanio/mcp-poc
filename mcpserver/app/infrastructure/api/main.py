@@ -1,12 +1,11 @@
 import asyncio
 import logging
 import random
-from collections.abc import AsyncGenerator, Callable, Coroutine
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, cast
 
 from fastapi import FastAPI
-from fastapi_mcp import FastApiMCP  # type: ignore[import]
+from fastapi_mcp import FastApiMCP  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
 from app.core.logconfig import setup_logging
@@ -26,11 +25,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # Load the ML model
     from app.infrastructure.db.connection import setup_database_models
 
-    # Cast to a typed async callable to satisfy the type checker
-
-    setup_database_models = cast(
-        Callable[[], Coroutine[Any, Any, None]], setup_database_models
-    )
+    # No es necesario castear; las anotaciones de `setup_database_models` son suficientes
     setup_logging()
 
     # Asegúrate de que el broker esté conectado
@@ -42,7 +37,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         await redis_broker.connect()
 
     if getAppSettings().env != "test":
-        logger.info("🟢 Test environment detected, starting FastStream in background...")
+        logger.info("Starting FastStream in background (non-test env)...")
         # Inicia FastStream en segundo plano
         asyncio.create_task(faststream_app.run())
 

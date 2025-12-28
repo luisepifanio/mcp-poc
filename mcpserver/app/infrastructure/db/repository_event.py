@@ -32,8 +32,8 @@ class GetMultiTypedDict(TypedDict, total=False):
 class AsyncSQLAlchemyEventRepository(EventRepository):
     def __init__(self, session: AsyncSession):
         self.session: AsyncSession = session
-        self.event_crud: FastCRUD = FastCRUD(Event)
-        self.transition_crud: FastCRUD = FastCRUD(EventTransition)
+        self.event_crud: Any = FastCRUD(Event)
+        self.transition_crud: Any = FastCRUD(EventTransition)
 
     # -------------------------------------------------------------------------
     # saveMany: Simple insert, fails on conflict (no conflict resolution)
@@ -184,7 +184,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         try:
             query = select(Event).where(
                 Event.external_uuid == external_uuid,
-                Event.deleted_at.is_(None),
+                cast(Any, Event.deleted_at).is_(None),
             )
             result = await self.session.execute(query)
             return result.scalars().one_or_none()
@@ -196,7 +196,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         try:
             query = select(Event).where(
                 Event.id == event_id,
-                Event.deleted_at.is_(None),
+                cast(Any, Event.deleted_at).is_(None),
             )
             result = await self.session.execute(query)
             return result.scalars().one_or_none()
@@ -208,7 +208,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         if isinstance(found, Event):
             return found
         try:
-            return Event.model_validate(found)  # type: ignore[arg-type]
+            return Event.model_validate(found)
         except Exception:
             logger.warning(
                 "Failed to coerce found object to Event via model_validate: %s",
@@ -216,7 +216,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             )
         # Assume dict-like otherwise
         try:
-            return Event(**found)  # type: ignore[arg-type]
+            return Event(**found)
         except Exception:
             logger.warning(
                 "Failed to coerce found object to Event via dict constructor: %s",
@@ -254,7 +254,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             query = (
                 select(Event)
                 .where(Event.id == event.id)
-                .options(selectinload(Event.transitions))
+                .options(selectinload(cast(Any, Event.transitions)))
             )
             result = await self.session.execute(query)
             evt = result.scalars().one()
@@ -280,7 +280,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                 else Err(
                     ErrorDetail(
                         error=ErrorCatalog.NOT_FOUND.value,
-                        detail=f"Event with external_uuid {input.external_uuid} not found.",
+                        detail=f"Event with external_uuid {event.external_uuid} not found.",
                     )
                 )
                 if len(evs) == 0
@@ -307,17 +307,20 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         ]
 
         expression = (
-            or_(Event.id.in_(uids), Event.external_uuid.in_(external_uids))
+            or_(
+                cast(Any, Event.id).in_(uids),
+                cast(Any, Event.external_uuid).in_(external_uids),
+            )
             if len(uids) > 0 and len(external_uids) > 0
-            else Event.id.in_(uids)
+            else cast(Any, Event.id).in_(uids)
             if len(uids) > 0
-            else Event.external_uuid.in_(external_uids)
+            else cast(Any, Event.external_uuid).in_(external_uids)
         )
         try:
             query = (
                 select(Event)
-                .where(expression, Event.deleted_at.is_(None))
-                .options(selectinload(Event.transitions))
+                .where(expression, cast(Any, Event.deleted_at).is_(None))
+                .options(selectinload(cast(Any, Event.transitions)))
             )
             result = await self.session.execute(query)
             return Ok(list(result.scalars().all()))
@@ -343,8 +346,8 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
             query = (
                 select(Event)
-                .where(Event.id.in_(ids))
-                .options(selectinload(Event.transitions))
+                .where(cast(Any, Event.id).in_(ids))
+                .options(selectinload(cast(Any, Event.transitions)))
             )
             result = await self.session.execute(query)
             loaded = result.scalars().all()

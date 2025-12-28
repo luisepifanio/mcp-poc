@@ -17,6 +17,7 @@
 ## 📋 Quick Start
 
 ### Setup Inicial
+
 ```bash
 # 1. Clonar y navegar
 cd mcpserver
@@ -36,6 +37,7 @@ uv run pytest
 ```
 
 ### URLs importantes
+
 - **API**: http://127.0.0.1:8000
 - **Docs**: http://127.0.0.1:8000/docs
 - **ReDoc**: http://127.0.0.1:8000/redoc
@@ -45,23 +47,25 @@ uv run pytest
 ## 🏗️ Proyecto Overview
 
 ### Principios Core
+
 - **Clean Architecture**: 3 capas (core/domain → usecases → infrastructure)
 - **Dependency Injection**: Dependencias inyectadas, nunca instanciadas en componentes
 - **Type Safety**: Tipos explícitos en TODO, mypy strict mode
 - **Testing First**: Unit + Functional tests, mínimo 75% coverage
 
 ### Stack Técnico
-| Componente | Tecnología | Versión | Rol |
-|------------|-----------|---------|-----|
-| Lenguaje | Python | 3.12+ | Runtime |
-| Framework Web | FastAPI | 0.121+ | API REST |
-| BD/ORM | SQLAlchemy + SQLModel | 2.0+ / 0.0.27 | Persistencia |
-| BD Storage | SQLite/PostgreSQL | - | Dev/Prod |
-| Testing | pytest | 9.0+ | Tests unitarios/funcionales |
-| Linting | Ruff | 0.14+ | **Obligatorio** |
-| Type Checking | mypy | latest | **Obligatorio** (strict mode) |
-| Logging | logging + json-logger | std | Structured logs |
-| Scraping | Scrapy + Playwright | latest | Web scraping |
+
+| Componente    | Tecnología            | Versión       | Rol                           |
+| ------------- | --------------------- | ------------- | ----------------------------- |
+| Lenguaje      | Python                | 3.12+         | Runtime                       |
+| Framework Web | FastAPI               | 0.121+        | API REST                      |
+| BD/ORM        | SQLAlchemy + SQLModel | 2.0+ / 0.0.27 | Persistencia                  |
+| BD Storage    | SQLite/PostgreSQL     | -             | Dev/Prod                      |
+| Testing       | pytest                | 9.0+          | Tests unitarios/funcionales   |
+| Linting       | Ruff                  | 0.14+         | **Obligatorio**               |
+| Type Checking | mypy                  | latest        | **Obligatorio** (strict mode) |
+| Logging       | logging + json-logger | std           | Structured logs               |
+| Scraping      | Scrapy + Playwright   | latest        | Web scraping                  |
 
 ### Estructura Carpetas
 
@@ -104,6 +108,7 @@ tests/
 Este workflow es **REPETIBLE** - cada feature sigue estos pasos:
 
 ### Step 1: Definir Requerimientos
+
 ```
 - Escribir descripción clara de la funcionalidad
 - Definir criterios de aceptación
@@ -111,6 +116,7 @@ Este workflow es **REPETIBLE** - cada feature sigue estos pasos:
 ```
 
 ### Step 2: Diseño de Solución
+
 ```
 - Definir entidades en app/core/entities.py
 - Crear interfaces en app/core/interfaces.py
@@ -118,6 +124,7 @@ Este workflow es **REPETIBLE** - cada feature sigue estos pasos:
 ```
 
 ### Step 3: Implementar (Core → Infrastructure)
+
 ```
 # 1. Implementar lógica en core/usecases/
 async def execute(self, input: InputDTO) -> Result[OutputDTO, Error]:
@@ -136,6 +143,7 @@ async def enqueue_event(input: EnqueuedEventUseCaseInput) -> dict:
 ```
 
 ### Step 4: Testing Validatorio (Unit + Functional)
+
 ```
 # Unit: Lógica aislada con mocks
 def test_use_case_logic(uow_mock):
@@ -150,6 +158,7 @@ async def test_use_case_e2e(uow_factory, dbsession):
 ```
 
 ### Step 5: Quality Gates (Antes de Commit)
+
 ```bash
 # 1. Ruff: Linting y formatting
 uv run ruff check --fix . && uv run ruff format .
@@ -171,6 +180,7 @@ git add -A && git commit -m "..."
 ### 1️⃣ Clean Architecture: Core → Infrastructure
 
 **❌ MALO** (dependency pointing outward):
+
 ```python
 # En app/core/usecases/event_usecases.py
 from sqlalchemy.orm import Session  # ❌ Infrastructure dependency
@@ -181,6 +191,7 @@ class EnqueueEventUseCase:
 ```
 
 **✅ BUENO** (dependency inversion):
+
 ```python
 # En app/core/usecases/event_usecases.py
 from app.core.unit_of_work import IUnitOfWork  # ✅ Abstract interface
@@ -193,6 +204,7 @@ class EnqueueEventUseCase:
 ### 2️⃣ Result Type para Manejo de Errores
 
 **❌ MALO** (lanzar excepciones):
+
 ```python
 async def execute(self, input: EnqueuedEventUseCaseInput) -> EnqueuedEventUseCaseOutput:
     if not input.name:
@@ -201,6 +213,7 @@ async def execute(self, input: EnqueuedEventUseCaseInput) -> EnqueuedEventUseCas
 ```
 
 **✅ BUENO** (Result type):
+
 ```python
 async def execute(self, input: EnqueuedEventUseCaseInput) -> Result[EnqueuedEventUseCaseOutput, ErrorDetail]:
     if not input.name:
@@ -211,6 +224,7 @@ async def execute(self, input: EnqueuedEventUseCaseInput) -> Result[EnqueuedEven
 ### 3️⃣ UUID Auto-generation Pattern
 
 **El patrón correcto** cuando se requiere auto-generación:
+
 ```python
 # En Pydantic DTO: marcar que puede ser auto-generado
 class EnqueuedEventUseCaseInput(BaseModel):
@@ -224,18 +238,20 @@ evt = Event(id=event_id, ...)  # ✅ Contrato claro
 ### 4️⃣ Dependency Injection en Tests
 
 **Unit Tests** (con mocks):
+
 ```python
 @pytest.mark.asyncio
 async def test_use_case_logic(uow_mock):
     # Fixture inyecta mock de UnitOfWork
     use_case = EnqueueEventUseCase(uow=uow_mock)
     result = await use_case.execute(input_data)
-    
+
     assert result.is_ok()
     uow_mock.events.save_or_resolve_one.assert_called_once()
 ```
 
 **Functional Tests** (BD real):
+
 ```python
 @pytest.mark.asyncio
 async def test_use_case_e2e(uow_factory):
@@ -249,6 +265,7 @@ async def test_use_case_e2e(uow_factory):
 ### 5️⃣ Concurrency & Idempotence Patterns
 
 **Scenario: 2 requests simultáneos con mismo external_uuid**
+
 ```python
 # asyncio.gather() ejecuta en paralelo
 results = await asyncio.gather(
@@ -262,6 +279,7 @@ assert results[0].id == results[1].id
 ```
 
 **Cómo funciona la idempotencia**:
+
 1. Request 1 llega primero → Crea evento, guarda en BD
 2. Request 2 llega casi simultáneamente → `save_or_resolve_one()` detecta external_uuid existente
 3. Request 2 → Retorna el evento existente (mismo que Request 1)
@@ -273,14 +291,14 @@ assert results[0].id == results[1].id
 
 ### Estructura: Unit vs Functional
 
-| Aspecto | Unit Tests | Functional Tests |
-|---------|-----------|-----------------|
-| **Ubicación** | `tests/unit/` | `tests/functional/` |
-| **Dependencias** | Mockeadas | Reales (BD en memoria) |
-| **Velocidad** | ~100ms | ~500ms |
-| **Objetivo** | Lógica aislada | End-to-end flows |
-| **BD** | No necesaria | SQLite in-memory |
-| **Ejemplo** | Validar UseCase con mock UoW | Validar UseCase con BD real |
+| Aspecto          | Unit Tests                   | Functional Tests            |
+| ---------------- | ---------------------------- | --------------------------- |
+| **Ubicación**    | `tests/unit/`                | `tests/functional/`         |
+| **Dependencias** | Mockeadas                    | Reales (BD en memoria)      |
+| **Velocidad**    | ~100ms                       | ~500ms                      |
+| **Objetivo**     | Lógica aislada               | End-to-end flows            |
+| **BD**           | No necesaria                 | SQLite in-memory            |
+| **Ejemplo**      | Validar UseCase con mock UoW | Validar UseCase con BD real |
 
 ### Commandos Útiles
 
@@ -307,6 +325,7 @@ uv run pytest -v --tb=short -x  # -x: stop on first failure
 ### Fixture Pattern para DI en Tests
 
 **Crear mock de UnitOfWork** (en `tests/unit/conftest.py`):
+
 ```python
 from unittest.mock import AsyncMock, MagicMock
 
@@ -322,14 +341,15 @@ def uow_mock() -> MagicMock:
 ```
 
 **Usar en test**:
+
 ```python
 @pytest.mark.asyncio
 async def test_something(uow_mock):
     uow_mock.events.save_or_resolve_one = AsyncMock(return_value=Ok([event]))
-    
+
     use_case = EnqueueEventUseCase(uow=uow_mock)
     result = await use_case.execute(input)
-    
+
     assert result.is_ok()
 ```
 
@@ -347,11 +367,13 @@ uv run ruff check --fix . && uv run ruff format . && uv run ruff check .
 ```
 
 **Configuración** (`pyproject.toml`):
+
 - Line length: 90 chars
 - Target: Python 3.12
 - Rules: E, W, F, I, B, C4, UP
 
 **Lo que valida**:
+
 - ✅ Imports ordenados (isort)
 - ✅ Unused imports/variables removidos
 - ✅ Type hints presentes
@@ -367,11 +389,13 @@ uv run mypy app
 ```
 
 **Configuración** (`pyproject.toml`):
+
 - `strict = true` → Requiere types en TODO
 - `disallow_untyped_defs = true` → Funciones sin tipos = error
 - `disallow_incomplete_defs = true` → Types incompletos = error
 
 **Impacto práctico**:
+
 ```python
 # ❌ RECHAZADO por mypy
 def process_data(input):  # Missing type hint
@@ -385,6 +409,7 @@ def process_data(input: InputDTO) -> OutputDTO:
 ### 3. pytest (Testing)
 
 **Objetivos**:
+
 - ✅ Cobertura >= 75%
 - ✅ Tests unitarios para lógica aislada
 - ✅ Tests funcionales para flujos end-to-end
@@ -393,6 +418,7 @@ def process_data(input: InputDTO) -> OutputDTO:
 **Patrones**:
 
 **Unit Test**:
+
 ```python
 @pytest.mark.asyncio
 async def test_u1_valid_input(uow_mock):
@@ -403,6 +429,7 @@ async def test_u1_valid_input(uow_mock):
 ```
 
 **Functional Test**:
+
 ```python
 @pytest.mark.asyncio
 async def test_f1_happy_path(uow_factory, dbsession):
@@ -411,13 +438,14 @@ async def test_f1_happy_path(uow_factory, dbsession):
         use_case = EnqueueEventUseCase(uow=uow)
         result = await use_case.execute(valid_input)
         assert result.is_ok()
-        
+
         # Verificar en DB
         db_event = await dbsession.get(Event, result.unwrap().id)
         assert db_event is not None
 ```
 
 **Concurrency Test** (race conditions):
+
 ```python
 @pytest.mark.asyncio
 async def test_c1_concurrent_same_external_uuid(uow_factory):
@@ -426,7 +454,7 @@ async def test_c1_concurrent_same_external_uuid(uow_factory):
         make_request(uuid1),
         make_request(uuid1),  # ← Mismo external_uuid
     )
-    
+
     # ✅ Ambos retornan el MISMO evento (idempotente)
     assert results[0]["id"] == results[1]["id"]
 ```
@@ -436,6 +464,7 @@ async def test_c1_concurrent_same_external_uuid(uow_factory):
 ## 🔧 Common Commands
 
 ### Setup & Installation
+
 ```bash
 # Instalar dependencias
 uv sync --group dev
@@ -448,6 +477,7 @@ uv lock
 ```
 
 ### Development
+
 ```bash
 # Servidor con auto-reload
 uv run fastapi dev
@@ -460,6 +490,7 @@ uv run python -c "import app; print(app.__name__)"
 ```
 
 ### Testing & Quality
+
 ```bash
 # Todos los tests
 uv run pytest
@@ -481,6 +512,7 @@ git commit  # Automáticamente ejecuta checks
 ```
 
 ### Git & Commits
+
 ```bash
 # Ver status
 git status
@@ -520,11 +552,13 @@ LOG_LEVEL=INFO
 ```
 
 **Ubicación**:
+
 - `local.env` → Desarrollo (gitignored)
 - `test.env` → Testing
 - Variables de entorno del sistema → Producción
 
 **Cómo se cargan** (en `app/core/settings.py`):
+
 1. Leer variable `ENV`
 2. Si `ENV=development` → cargar `local.env`
 3. Si `ENV=test` → cargar `test.env`
@@ -550,6 +584,7 @@ INFRASTRUCTURE (SQLAlchemy, FastAPI, Redis, etc.)
 ```
 
 **En nuestro proyecto**:
+
 - `app/core/entities.py` → ENTITIES
 - `app/core/interfaces.py` → INTERFACES
 - `app/core/usecases/` → USE CASES
@@ -565,7 +600,7 @@ class IRepository(ABC, Generic[T]):
     @abstractmethod
     async def save(self, entity: T) -> T:
         pass
-    
+
     @abstractmethod
     async def get_by_id(self, id: UUID) -> T | None:
         pass
@@ -574,7 +609,7 @@ class IRepository(ABC, Generic[T]):
 class AsyncSQLAlchemyEventRepository(IRepository[Event]):
     def __init__(self, session: AsyncSession):
         self.session = session
-    
+
     async def save(self, event: Event) -> Event:
         self.session.add(event)
         await self.session.flush()
@@ -589,7 +624,7 @@ class IUnitOfWork(ABC):
     @abstractmethod
     async def __aenter__(self):
         pass
-    
+
     @abstractmethod
     async def commit(self):
         pass
@@ -599,17 +634,18 @@ class AsyncSQLAlchemyUnitOfWork(IUnitOfWork):
     def __init__(self, session_factory):
         self.session = None
         self._session_factory = session_factory
-    
+
     async def __aenter__(self):
         self.session = self._session_factory()
         self.events = AsyncSQLAlchemyEventRepository(self.session)
         return self
-    
+
     async def commit(self):
         await self.session.commit()
 ```
 
 **Uso en Use Cases**:
+
 ```python
 async def execute(self, input: Input) -> Result[Output, Error]:
     async with self.uow as uow:
@@ -624,6 +660,7 @@ async def execute(self, input: Input) -> Result[Output, Error]:
 ## 🐛 Troubleshooting
 
 ### Problema: Tests fallan con `ModuleNotFoundError`
+
 ```bash
 # Solución: Verificar pythonpath en pyproject.toml
 [tool.pytest.ini_options]
@@ -635,6 +672,7 @@ uv run pytest
 ```
 
 ### Problema: `mypy` reporta errores inesperados
+
 ```bash
 # Ver errores con códigos
 uv run mypy app --show-error-codes
@@ -645,6 +683,7 @@ uv run mypy app --show-error-codes
 ```
 
 ### Problema: `Ruff` reporta imports no utilizados
+
 ```bash
 # Auto-fix
 uv run ruff check --fix .
@@ -654,6 +693,7 @@ grep -n "^from\|^import" archivo.py
 ```
 
 ### Problema: Tests timeout en funcionales
+
 ```bash
 # Aumentar timeout
 pytest --timeout=30  # 30 segundos
@@ -671,6 +711,7 @@ async def test_something():
 Supongamos que quieres implementar una feature: "Crear endpoint para filtrar eventos por estado"
 
 ### 1. Requerimientos
+
 ```
 - Endpoint GET /events?state=PENDING
 - Retornar lista de eventos con ese estado
@@ -679,6 +720,7 @@ Supongamos que quieres implementar una feature: "Crear endpoint para filtrar eve
 ```
 
 ### 2. Diseño
+
 ```
 # Entidad: Already defined in entities.py (EventState enum exists)
 
@@ -703,12 +745,13 @@ async def get_many_by_state(
 ```
 
 ### 3. Implementar
+
 ```python
 # 1. En app/core/usecases/event_usecases.py
 class FilterEventsByStateUseCase(AsyncUseCase[FilterEventsInput, FilterEventsOutput]):
     def __init__(self, uow: IUnitOfWork):
         self.uow = uow
-    
+
     async def execute(self, input: FilterEventsInput) -> Result[FilterEventsOutput, Error]:
         async with self.uow:
             events = await self.uow.events.get_many_by_state(
@@ -761,11 +804,11 @@ async def test_filter_by_state(uow_mock):
     uow_mock.events.get_many_by_state = AsyncMock(
         return_value=[event1, event2]
     )
-    
+
     use_case = FilterEventsByStateUseCase(uow=uow_mock)
     input_data = FilterEventsInput(state=EventState.PENDING)
     result = await use_case.execute(input_data)
-    
+
     assert result.is_ok()
     assert len(result.unwrap().events) == 2
 
@@ -779,14 +822,14 @@ async def test_filter_by_state_e2e(uow_factory, dbsession):
     event3 = Event(name="E3", state=EventState.COMPLETED, ...)
     dbsession.add_all([event1, event2, event3])
     await dbsession.commit()
-    
+
     # Test
     async with uow_factory() as uow:
         use_case = FilterEventsByStateUseCase(uow=uow)
         result = await use_case.execute(
             FilterEventsInput(state=EventState.PENDING)
         )
-    
+
     # Assert
     assert result.is_ok()
     output = result.unwrap()
@@ -795,6 +838,7 @@ async def test_filter_by_state_e2e(uow_factory, dbsession):
 ```
 
 ### 5. Quality Gates
+
 ```bash
 # Linting
 uv run ruff check --fix . && uv run ruff format .
@@ -815,20 +859,21 @@ git push
 
 ## 🔐 Common Pitfalls & How to Avoid
 
-| Pitfall | Síntoma | Solución |
-|---------|---------|----------|
-| **No inyectar dependencias** | Tests imposibles de mockear | Siempre pasar dependencias al `__init__`, nunca instanciar internamente |
-| **Imports en app/ desde testing** | `unittest.mock` importado en producción | NUNCA importar testing libs en `app/`. Usar mocks solo en `tests/` |
-| **Type hints incompletos** | mypy falla | Especificar tipos explícitos en TODAS las funciones públicas |
-| **Tests flaky (aleatorios)** | Tests fallan a veces | Evitar `time.sleep()`, usar fixtures determinísticas |
-| **BD no limpias entre tests** | Tests interfieren entre sí | Usar fixture de BD en memoria que se reinicia cada test |
-| **Coverage drops** | Métodos nuevos sin tests | Escribir tests ANTES de mergear (o al menos junto con código) |
+| Pitfall                           | Síntoma                                 | Solución                                                                |
+| --------------------------------- | --------------------------------------- | ----------------------------------------------------------------------- |
+| **No inyectar dependencias**      | Tests imposibles de mockear             | Siempre pasar dependencias al `__init__`, nunca instanciar internamente |
+| **Imports en app/ desde testing** | `unittest.mock` importado en producción | NUNCA importar testing libs en `app/`. Usar mocks solo en `tests/`      |
+| **Type hints incompletos**        | mypy falla                              | Especificar tipos explícitos en TODAS las funciones públicas            |
+| **Tests flaky (aleatorios)**      | Tests fallan a veces                    | Evitar `time.sleep()`, usar fixtures determinísticas                    |
+| **BD no limpias entre tests**     | Tests interfieren entre sí              | Usar fixture de BD en memoria que se reinicia cada test                 |
+| **Coverage drops**                | Métodos nuevos sin tests                | Escribir tests ANTES de mergear (o al menos junto con código)           |
 
 ---
 
 ## 📊 Current Status
 
 ### Tests Coverage
+
 - ✅ **60 tests passing** (58 unit + functional, 2 skipped)
 - ✅ **78% coverage** (target: ≥75%)
 - ✅ Unit tests: 41 tests
@@ -836,11 +881,13 @@ git push
 - ✅ Concurrency tests: 3 tests (C1: external_uuid, C2: internal id, C3: mixed)
 
 ### Code Quality
+
 - ✅ **Ruff**: ALL PASSED
 - ✅ **mypy**: strict mode (production code clean)
 - ✅ **Pre-commit hooks**: [Pendiente de implementar]
 
 ### Architecture
+
 - ✅ Clean Architecture (3 capas)
 - ✅ Dependency Injection (todos los componentes)
 - ✅ Repository Pattern
@@ -879,6 +926,7 @@ git push
 ### Para Agentes IA:
 
 Si estás implementando una feature:
+
 1. Consulta este documento → Busca el **Workflow Típico** más similar a tu tarea
 2. Sigue los steps: Requerimientos → Diseño → Implementar → Testing → Quality Gates
 3. Si hay duda sobre patrón → Ve a **Key Patterns** section
@@ -896,10 +944,10 @@ Si estás implementando una feature:
 
 ## 📝 Document Versioning
 
-| Versión | Fecha | Cambios |
-|---------|-------|---------|
-| v2.0 | 2025-12-27 | **Complete rewrite**: Reorganizado para ser más practico y repetible. Added concurrency patterns, simplified commands, added typical workflow example. |
-| v1.0 | 2024-12-10 | Versión inicial |
+| Versión | Fecha      | Cambios                                                                                                                                                |
+| ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| v2.0    | 2025-12-27 | **Complete rewrite**: Reorganizado para ser más practico y repetible. Added concurrency patterns, simplified commands, added typical workflow example. |
+| v1.0    | 2024-12-10 | Versión inicial                                                                                                                                        |
 
 ---
 
