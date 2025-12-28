@@ -11,6 +11,7 @@ Test Categories:
     F4: JSON normalization - verify deterministic storage
     F5: Context handling - None vs empty dict
 """
+
 import json
 from collections.abc import AsyncGenerator, Callable
 from uuid import uuid4
@@ -135,8 +136,10 @@ async def test_f2_idempotency_by_external_uuid(
     async with dbsession as session:
         from sqlalchemy import func
 
-        stmt = select(func.count()).select_from(Event).where(
-            Event.external_uuid == test_uuid
+        stmt = (
+            select(func.count())
+            .select_from(Event)
+            .where(Event.external_uuid == test_uuid)
         )
         count_result = await session.execute(stmt)
         count = count_result.scalar()
@@ -230,7 +233,9 @@ async def test_f4_json_normalization_persisted_correctly(
     # Assert: Verificar que el payload está normalizado
     # Python dicts mantienen orden de inserción, pero JSON debe estar ordenado
     normalized_payload = json.loads(
-        json.dumps({"z": 3, "a": 1, "m": {"z": "last", "a": "first"}, "b": 2}, sort_keys=True)
+        json.dumps(
+            {"z": 3, "a": 1, "m": {"z": "last", "a": "first"}, "b": 2}, sort_keys=True
+        )
     )
     assert output.payload == normalized_payload
 
