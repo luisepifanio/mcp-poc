@@ -829,11 +829,11 @@ git push
 ## 📊 Current Status
 
 ### Tests Coverage
-- ✅ **59 tests passing** (57 unit + functional, 2 skipped)
+- ✅ **60 tests passing** (58 unit + functional, 2 skipped)
 - ✅ **78% coverage** (target: ≥75%)
 - ✅ Unit tests: 41 tests
-- ✅ Functional tests: 16 tests
-- ✅ Concurrency tests: 2 tests (C1: external_uuid, C2: internal id)
+- ✅ Functional tests: 17 tests
+- ✅ Concurrency tests: 3 tests (C1: external_uuid, C2: internal id, C3: mixed)
 
 ### Code Quality
 - ✅ **Ruff**: ALL PASSED

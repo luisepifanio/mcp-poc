@@ -188,3 +188,88 @@ async def test_c2_concurrent_same_internal_id(
     assert external_uuids[0] == db_event.external_uuid, (
         "Returned external_uuid should match the DB record's external_uuid"
     )
+
+
+@pytest.mark.asyncio
+async def test_c3_concurrent_mixed_id_and_external_uuid(
+    uow_factory: AsyncGenerator[UnitOfWork, None],
+    dbsession: AsyncSession,
+) -> None:
+    """
+    C3: Mixed concurrency: same external_uuid, different IDs.
+
+    Escenario mixto: un request fuerza un ID explícito y otro usa un ID
+    distinto, pero ambos comparten external_uuid. Deben resolver al MISMO
+    evento, demostrando idempotencia incluso cuando el cliente propone
+    IDs diferentes pero el external_uuid ya existe.
+    """
+
+    shared_external_uuid = uuid4()
+    explicit_id = uuid4()
+
+    async def request_with_explicit_id() -> dict:
+        """Colisiona con external_uuid compartido pero fuerza un ID explícito."""
+        async with uow_factory() as uow:
+            use_case = EnqueueEventUseCase(uow=uow)
+            input_data = EnqueuedEventUseCaseInput(
+                name="Mixed-Explicit-ID",
+                payload={"via": "explicit-id"},
+                id=explicit_id,
+                external_uuid=shared_external_uuid,
+            )
+            result = await use_case.execute(input_data)
+            assert result.is_ok(), f"Use case failed: {result.unwrap_err()}"
+            output = result.unwrap()
+            return {
+                "id": output.id,
+                "external_uuid": output.external_uuid,
+                "name": output.name,
+                "state": output.state,
+            }
+
+    async def request_with_different_id() -> dict:
+        """Colisiona por el mismo external_uuid pero propone un ID distinto."""
+        async with uow_factory() as uow:
+            use_case = EnqueueEventUseCase(uow=uow)
+            input_data = EnqueuedEventUseCaseInput(
+                name="Mixed-Different-ID",
+                payload={"via": "different-id"},
+                id=uuid4(),  # Different id, same external_uuid
+                external_uuid=shared_external_uuid,
+            )
+            result = await use_case.execute(input_data)
+            assert result.is_ok(), f"Use case failed: {result.unwrap_err()}"
+            output = result.unwrap()
+            return {
+                "id": output.id,
+                "external_uuid": output.external_uuid,
+                "name": output.name,
+                "state": output.state,
+            }
+
+    # Act: run both requests concurrently
+    results = await asyncio.gather(
+        request_with_explicit_id(),
+        request_with_different_id(),
+    )
+
+    # Assert: both resolve to the SAME event (idempotent on external_uuid)
+    ids = {r["id"] for r in results}
+    external_uuids = {r["external_uuid"] for r in results}
+
+    assert len(ids) == 1, f"Expected a single event id, got {ids}"
+    assert external_uuids == {
+        shared_external_uuid
+    }, f"Expected external_uuid={shared_external_uuid}, got {external_uuids}"
+
+    # Assert: DB contains only one event for that external_uuid
+    stmt = select(Event).where(Event.external_uuid == shared_external_uuid)
+    db_events = await dbsession.execute(stmt)
+    events = db_events.scalars().all()
+    assert len(events) == 1, (
+        f"Expected 1 event for external_uuid={shared_external_uuid}, found {len(events)}"
+    )
+
+    db_event = events[0]
+    assert db_event.id in ids
+    assert db_event.state == EventState.CREATED
