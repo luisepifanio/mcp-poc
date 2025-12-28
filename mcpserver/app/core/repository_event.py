@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Any
 from uuid import UUID
 
 from result import Err, Ok, Result
@@ -15,11 +16,31 @@ class EventRepository(ABC):
 
         Args:
             event (Event): The event to be deleted.
+            hard (bool): If True, performs a hard delete (removes from DB).
+                        If False, performs a soft delete (sets deleted_at timestamp).
 
         Returns:
             Result[bool, ErrorDetail]: The result of the delete operation.
             A boolean indicating success if successful, or an ErrorDetail if an error occurs.
             True if the event was deleted, False otherwise (e.g., if the event was not found).
+        """
+        pass
+
+    @abstractmethod
+    async def delete_multi(
+        self, events: list[Event]
+    ) -> Result[dict[str, Any], ErrorDetail]:
+        """Deletes multiple events from the repository.
+
+        Args:
+            events (list[Event]): The events to be deleted.
+
+        Returns:
+            Result[dict[str, Any], ErrorDetail]: A dictionary with:
+                - deleted: list[UUID] - IDs of successfully deleted events
+                - not_found: list[UUID] - IDs of events not found
+                - total_deleted: int - Count of deleted events
+                - total_not_found: int - Count of not found events
         """
         pass
 

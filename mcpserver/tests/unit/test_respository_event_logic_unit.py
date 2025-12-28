@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -14,6 +15,13 @@ class FakeRepo(EventRepository):
 
     async def delete(self, event: Event, hard: bool = False) -> Result[bool, ErrorDetail]:
         return Ok(True)
+
+    async def delete_multi(
+        self, events: list[Event]
+    ) -> Result[dict[str, Any], ErrorDetail]:
+        return Ok(
+            {"deleted": [], "not_found": [], "total_deleted": 0, "total_not_found": 0}
+        )
 
     async def get_by_external_uuid(
         self, external_uuid: UUID

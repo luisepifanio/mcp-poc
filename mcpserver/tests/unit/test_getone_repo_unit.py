@@ -15,6 +15,11 @@ class DummyRepo(EventRepository):
     async def delete(self, event: Event, hard: bool = False):
         return Ok(False)
 
+    async def delete_multi(self, events: list[Event]):
+        return Ok(
+            {"deleted": [], "not_found": [], "total_deleted": 0, "total_not_found": 0}
+        )
+
     async def get_by_external_uuid(self, external_uuid):
         return Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="no"))
 

@@ -115,7 +115,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                 "Resolving %d conflicted events after IntegrityError",
                 len(list_of_conflicted_events),
             )
-            canonical_events = await self.resolve_this_events(list_of_conflicted_events)
+            canonical_events = await self._resolve_this_events(list_of_conflicted_events)
             if canonical_events.is_err():
                 logger.error(
                     "Failed to resolve existing events after conflict: %s",
@@ -138,91 +138,6 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             list_of_events.extend(res_list)
 
         return Ok(list_of_events)
-
-    # -------------------------------------------------------------------------
-    # Helper: Resolve existing event after conflict
-    # -------------------------------------------------------------------------
-    async def _resolve_existing_event(self, event: Event) -> Event | None:
-        """Try to find the existing canonical row after an IntegrityError."""
-        found: Event | None = None
-
-        # 1) Try FastCRUD.get
-        try:
-            fastcrud_result = await self.event_crud.get(
-                self.session,
-                schema_to_select=Event,
-                return_as_model=True,
-                one_or_none=True,
-                external_uuid=event.external_uuid,
-                id=event.id,
-                deleted_at__is=None,
-            )
-            if fastcrud_result:
-                found = self._coerce_to_event(fastcrud_result)
-        except Exception:
-            pass
-
-        # 2) Fallback: SELECT by external_uuid
-        if found is None and event.external_uuid is not None:
-            found = await self._select_event_by_external_uuid(event.external_uuid)
-
-        # 3) Fallback: SELECT by id
-        if found is None and event.id is not None:
-            found = await self._select_event_by_id(event.id)
-
-        if found is not None:
-            logger.info(
-                "Resolved existing event after conflict: type=%s id=%s",
-                type(found).__name__,
-                getattr(found, "id", None),
-            )
-
-        return found
-
-    async def _select_event_by_external_uuid(self, external_uuid: UUID) -> Event | None:
-        """SELECT event by external_uuid, handling async properly."""
-        try:
-            query = select(Event).where(
-                Event.external_uuid == external_uuid,
-                cast(Any, Event.deleted_at).is_(None),
-            )
-            result = await self.session.execute(query)
-            return result.scalars().one_or_none()
-        except Exception:
-            return None
-
-    async def _select_event_by_id(self, event_id: UUID) -> Event | None:
-        """SELECT event by id, handling async properly."""
-        try:
-            query = select(Event).where(
-                Event.id == event_id,
-                cast(Any, Event.deleted_at).is_(None),
-            )
-            result = await self.session.execute(query)
-            return result.scalars().one_or_none()
-        except Exception:
-            return None
-
-    def _coerce_to_event(self, found: Any) -> Event | None:
-        """Coerce various return shapes to Event model."""
-        if isinstance(found, Event):
-            return found
-        try:
-            return Event.model_validate(found)
-        except Exception:
-            logger.warning(
-                "Failed to coerce found object to Event via model_validate: %s",
-                type(found),
-            )
-        # Assume dict-like otherwise
-        try:
-            return Event(**found)
-        except Exception:
-            logger.warning(
-                "Failed to coerce found object to Event via dict constructor: %s",
-                type(found),
-            )
-        return None
 
     def _ensure_transitions_collection(self, event: Event) -> None:
         """Ensure transitions collection exists without breaking SQLAlchemy internals."""
@@ -270,7 +185,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             # Rollback the failed transaction before attempting to resolve
             await self.session.rollback()
 
-            resolved: Result[list[Event], ErrorDetail] = await self.resolve_this_events(
+            resolved: Result[list[Event], ErrorDetail] = await self._resolve_this_events(
                 [event]
             )
 
@@ -298,7 +213,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                 ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
             )
 
-    async def resolve_this_events(
+    async def _resolve_this_events(
         self, list_of_events: list[Event]
     ) -> Result[list[Event], ErrorDetail]:
         uids = [ev.id for ev in list_of_events if ev.id is not None]
@@ -362,7 +277,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
 
     async def delete_multi(
         self, events: list[Event]
-    ) -> Result[DeleteTypedDict, ErrorDetail]:
+    ) -> Result[dict[str, Any], ErrorDetail]:
         result: DeleteTypedDict = {
             "deleted": [],
             "not_found": [],
@@ -381,7 +296,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
                     return Err(e)
         result["total_deleted"] = len(result["deleted"])
         result["total_not_found"] = len(result["not_found"])
-        return Ok(result)
+        return Ok(cast(dict[str, Any], result))
 
     async def delete(self, event: Event, hard: bool = False) -> Result[bool, ErrorDetail]:
         if event.id is None:
