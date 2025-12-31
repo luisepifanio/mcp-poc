@@ -421,7 +421,7 @@ def process_data(input: InputDTO) -> OutputDTO:
 
 **Objetivos**:
 
-- ✅ Cobertura >= 75%
+- ✅ Cobertura mínima: >= 85% (gate de cobertura)
 - ✅ Tests unitarios para lógica aislada
 - ✅ Tests funcionales para flujos end-to-end
 - ✅ Concurrency tests para race conditions
@@ -514,6 +514,15 @@ uv run pytest -v --tb=short -k "test_name"
 
 # Cobertura detallada
 uv run pytest --cov=app --cov-report=html
+
+# Validar gate mínimo (85%) con toda la suite
+uv run pytest -q
+
+# Ejecutar un test aislado SIN cobertura (evita fallar por umbral al no medir todo)
+uv run pytest -q --no-cov tests/functional/test_enqueue_event_concurrency_c1_c2.py::test_c2_concurrent_same_internal_id
+
+# Ejecutar un test aislado deshabilitando addopts (by-pass global)
+uv run pytest -q -o addopts="" tests/functional/test_enqueue_event_concurrency_c1_c2.py::test_c2_concurrent_same_internal_id
 
 # Linting
 uv run ruff check . && uv run ruff format . && uv run mypy app
@@ -1023,16 +1032,16 @@ git push
 
 ### Tests Coverage
 
-- ✅ **60 tests passing** (58 unit + functional, 2 skipped)
-- ✅ **87% coverage** (target: ≥75%)
-- ✅ Unit tests: 41 tests
-- ✅ Functional tests: 17 tests
-- ✅ Concurrency tests: 3 tests (C1: external_uuid, C2: internal id, C3: mixed)
+- ✅ **99 tests passing** (97 passed + 2 skipped)
+- ✅ **92% coverage** (gate mínimo: ≥85%)
+- ✅ Concurrency tests: 3 (C1: external_uuid, C2: internal id, C3: mixed)
+- ✅ Redis handlers (`startup`, `incoming`, `processing`) cubiertos al 100%
 
 ### Code Quality
 
 - ✅ **Ruff**: ALL PASSED
 - ✅ **mypy**: strict mode (green). Nota: `app/infrastructure/scrapy_spider/**` excluida temporalmente del análisis hasta su reimplementación.
+- ✅ **Coverage Gate**: Umbral mínimo configurado en 85% (pytest addopts + coverage fail_under)
 - ✅ **Pre-commit hooks**: [Pendiente de implementar]
 
 ### Architecture

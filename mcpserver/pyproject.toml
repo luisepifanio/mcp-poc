@@ -73,6 +73,7 @@ addopts = [
     "--cov-report=html",
     "--cov-report=xml",
     "--cov-branch",                           # Habilita la cobertura de ramas
+    "--cov-fail-under=85",                    # Umbral mínimo de cobertura
     "--import-mode=importlib",
 ]
 
@@ -100,7 +101,7 @@ source = ["app"]
 
 [tool.coverage.report]
 show_missing = true
-#fail_under = 90
+fail_under = 85
 skip_empty = true
 exclude_lines = [
     ".*# pragma: no cover",

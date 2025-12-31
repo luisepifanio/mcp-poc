@@ -14,7 +14,20 @@ async def test_validate_injection(value_inject: str) -> None:
 
 @pytest.mark.asyncio
 async def test_sync_ping(http_client: TestClient) -> None:
-    response = http_client.get("/ping")
+    # Patch FastStream publisher to avoid hitting real Redis serialization
+    from unittest.mock import AsyncMock, patch
+
+    from faststream.redis import RedisBroker
+
+    with (
+        patch.object(
+            RedisBroker, "_basic_publish", new_callable=AsyncMock
+        ) as mock_basic_publish,
+        patch.object(RedisBroker, "publish", new_callable=AsyncMock) as mock_publish,
+    ):
+        mock_basic_publish.return_value = None
+        mock_publish.return_value = None
+        response = http_client.get("/ping")
     assert response.status_code == 200
     assert response.json() == "pong"
 

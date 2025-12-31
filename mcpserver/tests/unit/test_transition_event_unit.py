@@ -10,10 +10,7 @@ Tests cover:
 
 from uuid import uuid4
 
-import pytest
-from result import Err, Ok
-
-from app.core.entities import Event, EventState, EventTransition
+from app.core.entities import Event, EventState
 from app.core.usecases.event_usecases import transition_event
 from app.errors import ErrorCatalog
 
@@ -21,7 +18,7 @@ from app.errors import ErrorCatalog
 class TestTransitionEventValidTransitions:
     """Tests for all valid state transitions."""
 
-    def test_created_to_pending(self):
+    def test_created_to_pending(self) -> None:
         """CREATED → PENDING is valid."""
         event = Event(name="test", state=EventState.CREATED)
         result = transition_event(event, EventState.PENDING)
@@ -33,7 +30,7 @@ class TestTransitionEventValidTransitions:
         assert event.transitions[0].from_state == EventState.CREATED
         assert event.transitions[0].to_state == EventState.PENDING
 
-    def test_created_to_failed(self):
+    def test_created_to_failed(self) -> None:
         """CREATED → FAILED is valid."""
         event = Event(name="test", state=EventState.CREATED)
         result = transition_event(event, EventState.FAILED)
@@ -42,7 +39,7 @@ class TestTransitionEventValidTransitions:
         event = result.unwrap()
         assert event.state == EventState.FAILED
 
-    def test_pending_to_processing(self):
+    def test_pending_to_processing(self) -> None:
         """PENDING → PROCESSING is valid (only one transition)."""
         event = Event(name="test", state=EventState.PENDING)
         result = transition_event(event, EventState.PROCESSING)
@@ -51,7 +48,7 @@ class TestTransitionEventValidTransitions:
         event = result.unwrap()
         assert event.state == EventState.PROCESSING
 
-    def test_processing_to_completed(self):
+    def test_processing_to_completed(self) -> None:
         """PROCESSING → COMPLETED is valid."""
         event = Event(name="test", state=EventState.PROCESSING)
         result = transition_event(event, EventState.COMPLETED)
@@ -60,7 +57,7 @@ class TestTransitionEventValidTransitions:
         event = result.unwrap()
         assert event.state == EventState.COMPLETED
 
-    def test_processing_to_failed(self):
+    def test_processing_to_failed(self) -> None:
         """PROCESSING → FAILED is valid."""
         event = Event(name="test", state=EventState.PROCESSING)
         result = transition_event(event, EventState.FAILED)
@@ -69,7 +66,7 @@ class TestTransitionEventValidTransitions:
         event = result.unwrap()
         assert event.state == EventState.FAILED
 
-    def test_processing_to_temporal_error(self):
+    def test_processing_to_temporal_error(self) -> None:
         """PROCESSING → TEMPORAL_ERROR is valid."""
         event = Event(name="test", state=EventState.PROCESSING)
         result = transition_event(event, EventState.TEMPORAL_ERROR)
@@ -78,7 +75,7 @@ class TestTransitionEventValidTransitions:
         event = result.unwrap()
         assert event.state == EventState.TEMPORAL_ERROR
 
-    def test_temporal_error_to_retrying(self):
+    def test_temporal_error_to_retrying(self) -> None:
         """TEMPORAL_ERROR → RETRYING is valid (only one transition)."""
         event = Event(name="test", state=EventState.TEMPORAL_ERROR)
         result = transition_event(event, EventState.RETRYING)
@@ -87,7 +84,7 @@ class TestTransitionEventValidTransitions:
         event = result.unwrap()
         assert event.state == EventState.RETRYING
 
-    def test_retrying_to_completed(self):
+    def test_retrying_to_completed(self) -> None:
         """RETRYING → COMPLETED is valid."""
         event = Event(name="test", state=EventState.RETRYING)
         result = transition_event(event, EventState.COMPLETED)
@@ -96,7 +93,7 @@ class TestTransitionEventValidTransitions:
         event = result.unwrap()
         assert event.state == EventState.COMPLETED
 
-    def test_retrying_to_exhausted(self):
+    def test_retrying_to_exhausted(self) -> None:
         """RETRYING → EXHAUSTED is valid."""
         event = Event(name="test", state=EventState.RETRYING)
         result = transition_event(event, EventState.EXHAUSTED)
@@ -105,7 +102,7 @@ class TestTransitionEventValidTransitions:
         event = result.unwrap()
         assert event.state == EventState.EXHAUSTED
 
-    def test_retrying_to_temporal_error(self):
+    def test_retrying_to_temporal_error(self) -> None:
         """RETRYING → TEMPORAL_ERROR is valid."""
         event = Event(name="test", state=EventState.RETRYING)
         result = transition_event(event, EventState.TEMPORAL_ERROR)
@@ -118,7 +115,7 @@ class TestTransitionEventValidTransitions:
 class TestTransitionEventInvalidTransitions:
     """Tests for invalid state transitions (should be rejected)."""
 
-    def test_created_to_completed_invalid(self):
+    def test_created_to_completed_invalid(self) -> None:
         """CREATED → COMPLETED is invalid."""
         event = Event(name="test", state=EventState.CREATED)
         result = transition_event(event, EventState.COMPLETED)
@@ -130,49 +127,49 @@ class TestTransitionEventInvalidTransitions:
         assert EventState.CREATED.value in error.detail
         assert EventState.COMPLETED.value in error.detail
 
-    def test_created_to_processing_invalid(self):
+    def test_created_to_processing_invalid(self) -> None:
         """CREATED → PROCESSING is invalid."""
         event = Event(name="test", state=EventState.CREATED)
         result = transition_event(event, EventState.PROCESSING)
 
         assert result.is_err()
 
-    def test_pending_to_completed_invalid(self):
+    def test_pending_to_completed_invalid(self) -> None:
         """PENDING → COMPLETED is invalid."""
         event = Event(name="test", state=EventState.PENDING)
         result = transition_event(event, EventState.COMPLETED)
 
         assert result.is_err()
 
-    def test_pending_to_failed_invalid(self):
+    def test_pending_to_failed_invalid(self) -> None:
         """PENDING → FAILED is invalid."""
         event = Event(name="test", state=EventState.PENDING)
         result = transition_event(event, EventState.FAILED)
 
         assert result.is_err()
 
-    def test_completed_to_any_invalid(self):
+    def test_completed_to_any_invalid(self) -> None:
         """COMPLETED has no valid transitions."""
         event = Event(name="test", state=EventState.COMPLETED)
         result = transition_event(event, EventState.RETRYING)
 
         assert result.is_err()
 
-    def test_failed_to_any_invalid(self):
+    def test_failed_to_any_invalid(self) -> None:
         """FAILED has no valid transitions."""
         event = Event(name="test", state=EventState.FAILED)
         result = transition_event(event, EventState.RETRYING)
 
         assert result.is_err()
 
-    def test_exhausted_to_any_invalid(self):
+    def test_exhausted_to_any_invalid(self) -> None:
         """EXHAUSTED has no valid transitions."""
         event = Event(name="test", state=EventState.EXHAUSTED)
         result = transition_event(event, EventState.RETRYING)
 
         assert result.is_err()
 
-    def test_processing_to_pending_invalid(self):
+    def test_processing_to_pending_invalid(self) -> None:
         """PROCESSING → PENDING is invalid (backward transition)."""
         event = Event(name="test", state=EventState.PROCESSING)
         result = transition_event(event, EventState.PENDING)
@@ -183,7 +180,7 @@ class TestTransitionEventInvalidTransitions:
 class TestTransitionEventEdgeCases:
     """Tests for edge cases and special scenarios."""
 
-    def test_transition_appends_to_existing_transitions(self):
+    def test_transition_appends_to_existing_transitions(self) -> None:
         """Multiple transitions should accumulate."""
         event = Event(name="test", state=EventState.CREATED)
 
@@ -201,7 +198,7 @@ class TestTransitionEventEdgeCases:
         assert event.transitions[0].to_state == EventState.PENDING
         assert event.transitions[1].to_state == EventState.PROCESSING
 
-    def test_transition_records_event_id(self):
+    def test_transition_records_event_id(self) -> None:
         """EventTransition should record the event_id."""
         event_id = uuid4()
         event = Event(name="test", state=EventState.CREATED, id=event_id)
@@ -212,7 +209,7 @@ class TestTransitionEventEdgeCases:
         event = result.unwrap()
         assert event.transitions[0].event_id == event_id
 
-    def test_transition_records_states(self):
+    def test_transition_records_states(self) -> None:
         """EventTransition should record from_state and to_state."""
         event = Event(name="test", state=EventState.CREATED)
 
@@ -224,7 +221,7 @@ class TestTransitionEventEdgeCases:
         assert transition.from_state == EventState.CREATED
         assert transition.to_state == EventState.PENDING
 
-    def test_state_machine_full_happy_path(self):
+    def test_state_machine_full_happy_path(self) -> None:
         """Test a complete valid flow through the state machine."""
         event = Event(name="test", state=EventState.CREATED)
 
@@ -246,7 +243,7 @@ class TestTransitionEventEdgeCases:
         # Verify final state
         assert event.transitions[-1].to_state == EventState.COMPLETED
 
-    def test_state_machine_with_error_recovery(self):
+    def test_state_machine_with_error_recovery(self) -> None:
         """Test error recovery path: PROCESSING → TEMPORAL_ERROR → RETRYING."""
         event = Event(name="test", state=EventState.PROCESSING)
 
@@ -259,7 +256,7 @@ class TestTransitionEventEdgeCases:
         assert event.state == EventState.RETRYING
         assert len(event.transitions) == 2
 
-    def test_state_machine_exhausted_path(self):
+    def test_state_machine_exhausted_path(self) -> None:
         """Test exhaustion path: PROCESSING → TEMPORAL_ERROR → RETRYING → EXHAUSTED."""
         event = Event(name="test", state=EventState.PROCESSING)
 
@@ -274,7 +271,7 @@ class TestTransitionEventEdgeCases:
 class TestTransitionEventErrorMessages:
     """Tests for error message clarity."""
 
-    def test_error_detail_includes_both_states(self):
+    def test_error_detail_includes_both_states(self) -> None:
         """Error message should include both from and to states."""
         event = Event(name="test", state=EventState.COMPLETED)
         result = transition_event(event, EventState.PENDING)
@@ -285,7 +282,7 @@ class TestTransitionEventErrorMessages:
         assert EventState.COMPLETED.value in error.detail
         assert EventState.PENDING.value in error.detail
 
-    def test_error_type_is_validation_failed(self):
+    def test_error_type_is_validation_failed(self) -> None:
         """Error type should be VALIDATION_FAILED."""
         event = Event(name="test", state=EventState.FAILED)
         result = transition_event(event, EventState.CREATED)
