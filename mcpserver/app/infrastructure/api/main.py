@@ -6,16 +6,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP  # type: ignore[import-untyped]
+from faststream.redis.fastapi import RedisRouter
 from pydantic import BaseModel
 
 from app.core.logconfig import setup_logging
 from app.core.settings import getAppSettings
+from app.infrastructure.api.router_registry import RouterRegistry
 from app.infrastructure.redis.main import app as faststream_app
 from app.infrastructure.redis.main import broker as redis_broker
 
-from .base_router import BaseRouter
-from .course_routes import router
-from .routes import get_routers
+from .ping_router import PingRouter
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +47,27 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # TODO: Clear if needed
 
 
-app = FastAPI(lifespan=lifespan)
-app.include_router(router)
+def bootstrap_api(app: FastAPI, registry: RouterRegistry) -> None:
+    for r in registry.get():
+        app.include_router(r.router)
 
 
-for specific in get_routers():
-    app.include_router(specific.router if isinstance(specific, BaseRouter) else specific)
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application."""
+    app = FastAPI(lifespan=lifespan)
+
+    # TODO: Use RouterRegistry to include all routers
+    app.include_router(RedisRouter(url="redis://localhost:6379"))
+
+    registry = RouterRegistry()
+    registry.add(PingRouter(redis_broker))
+
+    bootstrap_api(app, registry)
+
+    return app
+
+
+app = create_app()
 
 
 class Hello(BaseModel):

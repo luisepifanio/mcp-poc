@@ -1,7 +1,9 @@
 import logging
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from faststream.redis import RedisBroker
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +17,6 @@ async def test_validate_injection(value_inject: str) -> None:
 @pytest.mark.asyncio
 async def test_sync_ping(http_client: TestClient) -> None:
     # Patch FastStream publisher to avoid hitting real Redis serialization
-    from unittest.mock import AsyncMock, patch
-
-    from faststream.redis import RedisBroker
 
     with (
         patch.object(

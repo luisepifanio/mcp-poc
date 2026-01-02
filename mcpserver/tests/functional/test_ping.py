@@ -4,7 +4,7 @@ import pytest
 from faststream.redis import RedisBroker
 from httpx import ASGITransport, AsyncClient
 
-from app.infrastructure.api.pingrouter import PingRouter
+from app.infrastructure.api.ping_router import PingRouter
 
 
 @pytest.mark.asyncio

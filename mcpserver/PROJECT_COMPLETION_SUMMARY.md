@@ -9,22 +9,23 @@
 
 ## 📊 Final Metrics
 
-| Metric | Before | After | Change |
-| ------ | ------ | ----- | ------ |
-| **Coverage** | 87% | 92% | +5% ✅ |
-| **Tests** | 60 | 99 | +39 tests |
-| **Critical Functions Tested** | 3/4 | 4/4 | +1 |
-| **Quality Gates** | 1/3 | 3/3 | Mypy ✅ Ruff ✅ Coverage ✅ |
+| Metric                        | Before | After | Change                      |
+| ----------------------------- | ------ | ----- | --------------------------- |
+| **Coverage**                  | 87%    | 92%   | +5% ✅                      |
+| **Tests**                     | 60     | 99    | +39 tests                   |
+| **Critical Functions Tested** | 3/4    | 4/4   | +1                          |
+| **Quality Gates**             | 1/3    | 3/3   | Mypy ✅ Ruff ✅ Coverage ✅ |
 
 ---
 
 ## 🎯 Three Phases Executed
 
 ### Phase 1: Event State Transitions ✅
+
 - **File Tested**: `app/core/usecases/event_usecases.py`
 - **Tests Added**: 26 unit tests (`test_transition_event_unit.py`)
 - **Coverage**: 77% → 90% (+13%)
-- **What Was Tested**: 
+- **What Was Tested**:
   - All 10 valid state transitions
   - 8 invalid combinations
   - 6 edge cases (None values, empty lists, etc.)
@@ -33,6 +34,7 @@
 - **Result**: ✅ Core business logic fully tested
 
 ### Phase 2: API Endpoints & Lifespan ✅
+
 - **File Tested**: `app/infrastructure/api/main.py`
 - **Tests Added**: 5 functional tests (`test_api_endpoints_phase2.py`)
 - **Coverage**: 71% → 96% (+25%)
@@ -46,6 +48,7 @@
 - **Result**: ✅ All demo endpoints and lifespan behavior validated
 
 ### Phase 3: Redis Event Handlers ✅
+
 - **File Tested**: `app/infrastructure/redis/main.py`
 - **Tests Added**: 6 unit tests (`test_redis_handlers_unit.py`)
 - **Coverage**: 68% → 100% (+32%)
@@ -77,11 +80,13 @@
 ## 📁 Test Files Created
 
 1. **tests/unit/test_transition_event_unit.py**
+
    - 26 unit tests for state machine transitions
    - Tests valid paths, invalid combinations, edge cases
    - Uses AsyncMock for UseCase dependencies
 
 2. **tests/functional/test_api_endpoints_phase2.py**
+
    - 5 functional tests for demo endpoints
    - Tests /hello, /add, /cordoba_jokes, lifespan hooks
    - Real AsyncClient with TestClient pattern
@@ -109,6 +114,7 @@ precision = 2
 **Impact**: Tests now fail if coverage drops below 85%, preventing regressions
 
 **Bypass Commands** (for isolated test runs):
+
 ```bash
 # Run single test without coverage gate
 uv run pytest -q --no-cov tests/functional/test_name.py::test_function
@@ -122,6 +128,7 @@ uv run pytest -q -o addopts="" tests/test_file.py
 ## 📚 Documentation Updated
 
 ### 1. **Agents.md** (Developer Guide)
+
 - ✅ Updated "Current Status" section
 - ✅ Changed test count: 60 → 99 tests
 - ✅ Changed coverage: 87% → 92%
@@ -129,6 +136,7 @@ uv run pytest -q -o addopts="" tests/test_file.py
 - ✅ Added bypass commands for isolated test runs
 
 ### 2. **COVERAGE_OPPORTUNITIES.md** (Analysis Document)
+
 - ✅ Phase 1: Marked COMPLETED (26 tests, 77% → 90%)
 - ✅ Phase 2: Marked COMPLETED (5 tests, 71% → 96%)
 - ✅ Phase 3: Marked COMPLETED (6 tests, 68% → 100%)
@@ -143,16 +151,19 @@ uv run pytest -q -o addopts="" tests/test_file.py
 ### Testing Patterns Established
 
 1. **Unit Tests with Mocks**
+
    - Use `AsyncMock` for async dependencies
    - Mock external services (Redis, DB)
    - Test business logic in isolation
 
 2. **Functional Tests with Real Infrastructure**
+
    - Use `TestClient` from FastAPI
    - Use in-memory SQLite for DB
    - Patch external services like Redis broker
 
 3. **Async/Await Testing**
+
    - Use `@pytest.mark.asyncio` decorator
    - Mock async methods with `AsyncMock()`
    - Use `await` in test code for async handlers
@@ -174,15 +185,18 @@ uv run pytest -q -o addopts="" tests/test_file.py
 ## 🚀 Next Steps (Optional)
 
 ### Phase 4: Course UseCases Decision
+
 - **Status**: Incomplete TODO implementation (68% coverage, 22 statements)
 - **Decision Needed**: Keep and test (adds ~0.8% coverage) OR remove per "lo que no está no falla" principle
 - **Recommendation**: Remove if not actively needed; can be re-implemented when required
 
 ### Phase 5: Pre-commit Hooks (Optional)
+
 - Add `.pre-commit-config.yaml` to auto-run Ruff, mypy, pytest before commits
 - Prevents coverage gate violations from reaching git
 
 ### Phase 6: CI/CD Integration (Optional)
+
 - Verify coverage gate is enforced in GitHub Actions pipeline
 - Ensure all branches must pass 85% minimum before merge
 

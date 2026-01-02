@@ -1,10 +1,14 @@
+from abc import ABC, abstractmethod
+
 from fastapi import APIRouter
 
 
-class BaseRouter:
+class BaseRouter(ABC):
     def __init__(self) -> None:
-        self._router: APIRouter = APIRouter()
+        self.router = APIRouter()
+        self.register_routes()
 
-    @property
-    def router(self) -> APIRouter:
-        return self._router
+    @abstractmethod
+    def register_routes(self) -> None:
+        """Registra las rutas específicas del router."""
+        pass

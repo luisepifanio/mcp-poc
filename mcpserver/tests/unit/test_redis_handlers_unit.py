@@ -32,8 +32,8 @@ async def test_startup_skips_connect_when_already_connected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_handle_incoming_enqueue_event_ack_on_success() -> None:
-    from app.infrastructure.redis.main import handle_incoming_enqueue_event
+async def test_subscriber_demo_ack_on_success() -> None:
+    from app.infrastructure.redis.main import subscriber_demo
 
     msg = MagicMock()
     msg.ack = AsyncMock()
@@ -41,15 +41,15 @@ async def test_handle_incoming_enqueue_event_ack_on_success() -> None:
 
     body = {"message": "Hi there from /ping endpoint"}
 
-    await handle_incoming_enqueue_event(body, msg)
+    await subscriber_demo(body, msg)
 
     msg.ack.assert_awaited_once()
     msg.nack.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_handle_incoming_enqueue_event_nack_on_exception() -> None:
-    from app.infrastructure.redis.main import handle_incoming_enqueue_event
+async def test_subscriber_demo_ack_on_exception() -> None:
+    from app.infrastructure.redis.main import subscriber_demo
 
     msg = MagicMock()
     # Force ack to raise to hit exception path
@@ -58,7 +58,7 @@ async def test_handle_incoming_enqueue_event_nack_on_exception() -> None:
 
     body = {"message": "Hi there"}
 
-    await handle_incoming_enqueue_event(body, msg)
+    await subscriber_demo(body, msg)
 
     msg.nack.assert_awaited_once()
 

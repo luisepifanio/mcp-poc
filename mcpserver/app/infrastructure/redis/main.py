@@ -1,14 +1,49 @@
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from faststream import AckPolicy, Context, ContextRepo, FastStream
 from faststream.redis import RedisBroker, StreamSub
 from faststream.redis.annotations import RedisMessage
+from faststream.redis.subscriber.usecases import StreamBatchSubscriber, StreamSubscriber
+
+from app.core.usecases.event_usecases import EnqueuedEventUseCaseInput
 
 logger = logging.getLogger(__name__)
 # Configuración del broker de Redis
 broker = RedisBroker("redis://localhost:6379")
 app = FastStream(broker)
+
+
+def setup_redis_suscriber(
+    subject_name: str, min_idle_time: int = 5000
+) -> StreamSubscriber | StreamBatchSubscriber:
+    return broker.subscriber(
+        stream=StreamSub(
+            subject_name,
+            min_idle_time=min_idle_time,
+        ),
+        ack_policy=AckPolicy.MANUAL,
+    )
+
+
+DemoSubscriber: Callable[
+    [Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]
+] = setup_redis_suscriber("demo-subject")
+
+
+@DemoSubscriber
+async def subscriber_demo(
+    body: dict[str, Any],
+    msg: RedisMessage,
+) -> None:
+    try:
+        logger.info(f"Mensaje recibido: {body}")
+        # Procesa el mensaje aquí
+        await msg.ack()
+    except Exception as e:
+        logger.error(f"Error al procesar el mensaje: {e}")
+        await msg.nack()
 
 
 @app.on_startup
@@ -29,19 +64,25 @@ async def shutdown(context: Any = Context()) -> None:
     logger.info(f"Shutting redis\n {context}")
 
 
-@broker.subscriber(
+# Decorador tipado correctamente
+EnqueueEventSubscriber: Callable[
+    [Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]
+] = broker.subscriber(
     stream=StreamSub(
-        "in-subject",  # Nombre del stream
-        min_idle_time=5000,  # Tiempo mínimo de inactividad en milisegundos (5 segundos)
+        "enqueue-event-subject",
+        min_idle_time=5000,
     ),
-    ack_policy=AckPolicy.MANUAL,  # Política de reconocimiento manual
-)  # type: ignore[untyped-decorator]
-async def handle_incoming_enqueue_event(
-    body: dict[str, Any],
+    ack_policy=AckPolicy.MANUAL,
+)
+
+
+@EnqueueEventSubscriber
+async def handle_enqueue_event(
+    event: EnqueuedEventUseCaseInput,
     msg: RedisMessage,
 ) -> None:
     try:
-        logger.info(f"Mensaje recibido: {body}")
+        logger.info(f"Evento recibido: {event}")
         # Procesa el mensaje aquí
         await msg.ack()
     except Exception as e:
@@ -49,16 +90,20 @@ async def handle_incoming_enqueue_event(
         await msg.nack()
 
 
-@broker.subscriber(
+# Decorador tipado correctamente
+ProcessingEventSubscriber: Callable[
+    [Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]
+] = broker.subscriber(
     stream=StreamSub(
-        "processing-subject",
-        min_idle_time=5000,  # 5 seconds
+        "processing-event-subject",
+        min_idle_time=5000,
     ),
     ack_policy=AckPolicy.MANUAL,
-)  # type: ignore[untyped-decorator]
-@broker.publisher(
-    stream="out-subject"
-)  # <-- listen here  # type: ignore[untyped-decorator]
+)
+
+
+@ProcessingEventSubscriber
+@broker.publisher(stream="result-event-subject")  # <-- listen here
 async def handle_processing_event_queue(
     body: dict[str, Any],
     msg: RedisMessage,

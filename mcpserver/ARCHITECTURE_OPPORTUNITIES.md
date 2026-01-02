@@ -1,4 +1,5 @@
 # 🏗️ Top 5 Architecture Improvement Opportunities
+
 ## Clean Architecture & SOLID Principles Analysis
 
 **Date**: 2025-12-31  
@@ -10,18 +11,20 @@
 
 ## 📊 Executive Summary
 
-| Rank | Opportunity | SOLID Violation | Impact | Effort | Priority |
-| ---- | ----------- | --------------- | ------ | ------ | -------- |
-| #1 | **Course UseCases** | SRP + DIP | High | ⭐⭐ | 🔴 CRITICAL |
-| #2 | **Bare DB Layer Access** | DIP + ISP | High | ⭐⭐⭐ | 🔴 CRITICAL |
-| #3 | **Router Infrastructure Coupling** | DIP + SRP | Medium | ⭐⭐ | 🟠 MEDIUM |
-| #4 | **UseCase Result Type Inconsistency** | LSP | Medium | ⭐⭐ | 🟠 MEDIUM |
-| #5 | **Settings Global Singleton** | DIP + SRP | Low-Medium | ⭐ | 🟡 LOW |
+| Rank | Opportunity                           | SOLID Violation | Impact     | Effort | Priority    |
+| ---- | ------------------------------------- | --------------- | ---------- | ------ | ----------- |
+| #1   | **Course UseCases**                   | SRP + DIP       | High       | ⭐⭐   | 🔴 CRITICAL |
+| #2   | **Bare DB Layer Access**              | DIP + ISP       | High       | ⭐⭐⭐ | 🔴 CRITICAL |
+| #3   | **Router Infrastructure Coupling**    | DIP + SRP       | Medium     | ⭐⭐   | 🟠 MEDIUM   |
+| #4   | **UseCase Result Type Inconsistency** | LSP             | Medium     | ⭐⭐   | 🟠 MEDIUM   |
+| #5   | **Settings Global Singleton**         | DIP + SRP       | Low-Medium | ⭐     | 🟡 LOW      |
 
 ---
 
 ## 🎯 #1: Course UseCases - Dead Code & Incomplete Implementation
+
 ### VIOLATIONS: Single Responsibility + Dependency Inversion
+
 ### IMPACT: 🔴 CRITICAL | EFFORT: ⭐⭐ (1 hour)
 
 ### Current State
@@ -53,21 +56,25 @@ class CreateCourseUseCase:
 ### Problems Identified
 
 **1. Incomplete TODO Implementation** (SRP Violation)
+
 - `force_scrap` logic is a stub with `pass`
 - Suggests unfinished feature or unclear requirements
 - Creates cognitive load: "Is this feature needed?"
 
 **2. Two Classes, No Cohesion** (SRP Violation)
+
 - `GetAsyncCourseUseCase` and `CreateCourseUseCase` are loosely related
 - No shared abstraction or pattern
 - Mixed concerns: Get vs Create with different signatures
 
 **3. No Error Handling** (Inconsistent with Event UseCases)
+
 - Event UseCases return `Result[T, ErrorDetail]`
 - Course UseCases return raw values or None
 - Violates **Liskov Substitution Principle**: Subclasses not substitutable
 
 **4. Unused in Routes** (Dead Code)
+
 - No routes reference these UseCases
 - Repository exists (`course_crud`) but UseCases aren't connected
 - Violates **"Lo que no está, no falla"** principle
@@ -75,6 +82,7 @@ class CreateCourseUseCase:
 ### Why This Matters for the Template
 
 ❌ **Bad Template Pattern**:
+
 - Shows incomplete TODO instead of working example
 - Demonstrates error handling inconsistency (Result vs raw values)
 - Creates confusion: "Should I follow this pattern or the Event one?"
@@ -123,7 +131,7 @@ class GetAsyncCourseUseCase(
                 if input.force_scrap:
                     # Trigger web scraping here
                     pass
-                
+
                 courses = await uow.courses.get_many(input.course_ids)
                 return Ok(GetCourseUseCaseOutput(
                     courses=courses,
@@ -138,6 +146,7 @@ class GetAsyncCourseUseCase(
 ### Template Lesson
 
 ✅ **Always follow this pattern**:
+
 - Complete implementations with error handling
 - No TODO stubs in production code
 - Consistent Result[T, ErrorDetail] across all UseCases
@@ -146,7 +155,9 @@ class GetAsyncCourseUseCase(
 ---
 
 ## 🎯 #2: Bare DB Layer Access in Endpoints
+
 ### VIOLATIONS: Dependency Inversion + Interface Segregation
+
 ### IMPACT: 🔴 CRITICAL | EFFORT: ⭐⭐⭐ (2-3 hours)
 
 ### Current State
@@ -199,6 +210,7 @@ AsyncSessionLocal = async_sessionmaker(
 ### Problems Identified
 
 **1. Infrastructure Types in API Layer** (DIP Violation)
+
 ```python
 # ❌ BAD: API depends on concrete FastStream type
 def __init__(self, redis_broker: RedisBroker):
@@ -210,6 +222,7 @@ def __init__(self, message_broker: IMessageBroker):
 ```
 
 **2. Direct Access to Internals** (ISP Violation)
+
 ```python
 # ❌ BAD: Accessing private implementation details
 if (
@@ -225,6 +238,7 @@ if not await self.broker.is_connected():
 ```
 
 **3. Global Module-Level Initialization** (DIP Violation)
+
 ```python
 # ❌ BAD: Settings injected at module import time
 settings = getAppSettings()  # Executed when module loads
@@ -235,7 +249,7 @@ class DatabaseConnection:
     def __init__(self, settings: AppSettings):
         self.settings = settings
         self.engine: AsyncEngine | None = None
-    
+
     async def get_engine(self) -> AsyncEngine:
         if self.engine is None:
             self.engine = create_async_engine(self.settings.database_url, ...)
@@ -243,6 +257,7 @@ class DatabaseConnection:
 ```
 
 **4. Testability Issues**
+
 ```python
 # ❌ BAD: Hard to mock Redis in tests
 async def test_ping():
@@ -260,6 +275,7 @@ async def test_ping(message_broker_mock: MagicMock):
 ### Why This Matters for the Template
 
 ❌ **Bad Template Pattern**:
+
 - Shows tight coupling to infrastructure libraries (RedisBroker, SQLAlchemy)
 - Demonstrates accessing private attributes (`_connection`)
 - Creates unmockable code that's hard to test
@@ -275,17 +291,17 @@ from abc import ABC, abstractmethod
 
 class IMessageBroker(ABC):
     """Abstraction for message brokers (Redis, RabbitMQ, etc.)"""
-    
+
     @abstractmethod
     async def is_connected(self) -> bool:
         """Check if broker is connected."""
         pass
-    
+
     @abstractmethod
     async def connect(self) -> None:
         """Establish connection."""
         pass
-    
+
     @abstractmethod
     async def publish(self, message: dict, channel: str) -> None:
         """Publish message to channel."""
@@ -297,12 +313,12 @@ from abc import ABC, abstractmethod
 
 class IDatabase(ABC):
     """Abstraction for database connections."""
-    
+
     @abstractmethod
     async def get_session(self) -> AsyncSession:
         """Get database session."""
         pass
-    
+
     @abstractmethod
     async def setup_models(self) -> None:
         """Initialize database schema."""
@@ -319,17 +335,17 @@ from faststream.redis import RedisBroker
 class RedisMessageBrokerAdapter(IMessageBroker):
     def __init__(self, broker: RedisBroker):
         self._broker = broker
-    
+
     async def is_connected(self) -> bool:
         return (
             hasattr(self._broker, "_connection")
             and self._broker._connection is not None
         )
-    
+
     async def connect(self) -> None:
         if not await self.is_connected():
             await self._broker.connect()
-    
+
     async def publish(self, message: dict, channel: str) -> None:
         await self._broker.publish(message, stream=channel)
 
@@ -342,18 +358,18 @@ class SQLAlchemyDatabaseAdapter(IDatabase):
         self.settings = settings
         self._engine: AsyncEngine | None = None
         self._session_maker: async_sessionmaker | None = None
-    
+
     async def get_session(self) -> AsyncSession:
         if self._session_maker is None:
             await self._initialize()
         return self._session_maker()  # type: ignore
-    
+
     async def setup_models(self) -> None:
         if self._engine is None:
             await self._initialize()
         async with self._engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
-    
+
     async def _initialize(self) -> None:
         self._engine = create_async_engine(
             self.settings.database_url,
@@ -387,6 +403,7 @@ class PingRouter(BaseRouter):
 ```
 
 **Impact**:
+
 - +80-120 lines (abstraction interfaces + adapters)
 - Fully testable with mocks
 - Can swap implementations without changing API code
@@ -395,6 +412,7 @@ class PingRouter(BaseRouter):
 ### Template Lesson
 
 ✅ **Always follow this pattern for infrastructure**:
+
 1. Define abstract interface in `app/core/`
 2. Implement adapter in `app/infrastructure/`
 3. Inject interface into API/UseCase layer
@@ -404,7 +422,9 @@ class PingRouter(BaseRouter):
 ---
 
 ## 🎯 #3: Router Dependency Injection Inconsistency
+
 ### VIOLATIONS: Dependency Inversion + Single Responsibility
+
 ### IMPACT: 🟠 MEDIUM | EFFORT: ⭐⭐ (1.5 hours)
 
 ### Current State
@@ -435,6 +455,7 @@ for specific in get_routers():  # ❌ Hidden dependencies
 ### Problems Identified
 
 **1. Factory Pattern Without DI Container** (DIP Violation)
+
 ```python
 # ❌ BAD: Dependencies created in factory
 def get_routers(defaults=None):
@@ -448,7 +469,7 @@ class RouterRegistry:
     def __init__(self, broker: IMessageBroker, db: IDatabase):
         self.broker = broker
         self.db = db
-    
+
     def get_routers(self) -> list[BaseRouter]:
         return [
             PingRouter(self.broker),
@@ -457,6 +478,7 @@ class RouterRegistry:
 ```
 
 **2. Type Checking Complexity** (ISP Violation)
+
 ```python
 # ❌ BAD: Mix of BaseRouter and APIRouter, runtime type checking
 for specific in get_routers():
@@ -470,6 +492,7 @@ for router in registry.get_routers():  # All implement BaseRouter
 ```
 
 **3. Testing Complications** (DIP Violation)
+
 ```python
 # ❌ BAD: Must pass full list to override defaults
 def test_api():
@@ -496,7 +519,7 @@ from .base_router import BaseRouter
 
 class RouterRegistry:
     """Central registry for API routers with dependency injection."""
-    
+
     def __init__(
         self,
         message_broker: IMessageBroker,
@@ -504,7 +527,7 @@ class RouterRegistry:
     ):
         self.broker = message_broker
         self.db = database
-    
+
     def get_routers(self) -> list[BaseRouter]:
         """Get all configured routers with injected dependencies."""
         return [
@@ -549,6 +572,7 @@ def test_ping_router(router_registry):
 ```
 
 **Impact**:
+
 - +40-60 lines (clear DI container)
 - Eliminates magic factory pattern
 - Makes dependencies explicit and testable
@@ -557,6 +581,7 @@ def test_ping_router(router_registry):
 ### Template Lesson
 
 ✅ **Always follow this pattern for routing**:
+
 1. Create dedicated `RouterRegistry` class
 2. Inject dependencies explicitly in constructor
 3. Centralized router configuration
@@ -566,12 +591,15 @@ def test_ping_router(router_registry):
 ---
 
 ## 🎯 #4: UseCase Result Type Inconsistency
+
 ### VIOLATIONS: Liskov Substitution Principle
+
 ### IMPACT: 🟠 MEDIUM | EFFORT: ⭐⭐ (1.5 hours)
 
 ### Current State
 
 **Event UseCases** (✅ Good):
+
 ```python
 # app/core/usecases/event_usecases.py
 class EnqueueEventUseCase(AsyncUseCase[Input, Result[Output, ErrorDetail]]):
@@ -587,6 +615,7 @@ class TransitionEventUseCase(AsyncUseCase[Input, Result[Output, ErrorDetail]]):
 ```
 
 **Course UseCases** (❌ Bad):
+
 ```python
 # app/core/usecases/course_usecases.py
 class GetAsyncCourseUseCase(AsyncUseCase[Input, list[Course]]):
@@ -715,7 +744,7 @@ async def create_course(
     use_case: CreateCourseUseCase = Depends(),
 ) -> dict:
     result = await use_case.execute(input)
-    
+
     match result:
         case Ok(output):
             return output.model_dump()
@@ -732,7 +761,7 @@ async def get_courses(
     use_case: GetAsyncCourseUseCase = Depends(),
 ) -> dict:
     result = await use_case.execute(input)
-    
+
     match result:
         case Ok(output):
             return output.model_dump()
@@ -744,6 +773,7 @@ async def get_courses(
 ```
 
 **Impact**:
+
 - +40-50 lines (DTO classes + error handling)
 - Consistent pattern across all UseCases
 - Testable error scenarios
@@ -752,6 +782,7 @@ async def get_courses(
 ### Template Lesson
 
 ✅ **Always follow this pattern for all UseCases**:
+
 1. All UseCases return `Result[OutputDTO, ErrorDetail]`
 2. Create output DTOs with relevant fields
 3. Handle all exceptions with proper error details
@@ -761,7 +792,9 @@ async def get_courses(
 ---
 
 ## 🎯 #5: Settings Global Singleton
+
 ### VIOLATIONS: Dependency Inversion + Single Responsibility
+
 ### IMPACT: 🟡 LOW | EFFORT: ⭐ (45 minutes)
 
 ### Current State
@@ -789,6 +822,7 @@ settings = getAppSettings()  # Called when module loads!
 ```
 
 **Usage in Infrastructure**:
+
 ```python
 # app/infrastructure/db/connection.py
 settings = getAppSettings()  # Global call at module level
@@ -801,6 +835,7 @@ async_engine: AsyncEngine = create_async_engine(
 ### Problems Identified
 
 **1. Global Mutable State** (DIP Violation)
+
 ```python
 # ❌ BAD: Hard to test with different configurations
 # Can't easily test with different database URLs
@@ -809,6 +844,7 @@ settings.database_url = "sqlite:///:memory:"  # Might not work!
 ```
 
 **2. Module-Level Side Effects** (SRP Violation)
+
 ```python
 # ❌ BAD: Initializing engine when module imports
 settings = getAppSettings()  # Happens on import!
@@ -819,6 +855,7 @@ async_engine = create_async_engine(settings.database_url)
 ```
 
 **3. Testing Complications** (DIP Violation)
+
 ```python
 # ❌ BAD: Must manipulate global state in tests
 def test_with_test_db():
@@ -868,12 +905,12 @@ class AppSettings(BaseSettings):
 # ✅ GOOD: app/infrastructure/db/connection.py
 class DatabaseConnection:
     """Encapsulates database connection with explicit DI."""
-    
+
     def __init__(self, settings: AppSettings):
         self.settings = settings
         self._engine: AsyncEngine | None = None
         self._session_maker: async_sessionmaker | None = None
-    
+
     async def get_engine(self) -> AsyncEngine:
         if self._engine is None:
             self._engine = create_async_engine(
@@ -881,7 +918,7 @@ class DatabaseConnection:
                 connect_args={"check_same_thread": False},
             )
         return self._engine
-    
+
     async def get_session(self) -> AsyncSession:
         if self._session_maker is None:
             engine = await self.get_engine()
@@ -890,7 +927,7 @@ class DatabaseConnection:
                 expire_on_commit=False,
             )
         return self._session_maker()
-    
+
     async def setup_models(self) -> None:
         engine = await self.get_engine()
         async with engine.begin() as conn:
@@ -909,7 +946,7 @@ db_connection = DatabaseConnection(settings)
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     setup_logging()
     await db_connection.setup_models()
-    
+
     yield
     # Cleanup if needed
 ```
@@ -966,6 +1003,7 @@ def get_default_settings() -> AppSettings:
 ```
 
 **Impact**:
+
 - +40-50 lines (DatabaseConnection class, cleaner settings)
 - Eliminates global state
 - Testing is straightforward
@@ -974,6 +1012,7 @@ def get_default_settings() -> AppSettings:
 ### Template Lesson
 
 ✅ **Always follow this pattern for configuration**:
+
 1. Create settings class without global state
 2. Wrap infrastructure (DB, Redis) in classes that take settings in constructor
 3. Initialize in lifespan or main app factory
@@ -985,13 +1024,13 @@ def get_default_settings() -> AppSettings:
 
 ## 📊 Summary Table: Before & After
 
-| Opportunity | Current | Improved | Benefit |
-| --- | --- | --- | --- |
-| **#1 Course UseCases** | Incomplete TODOs, no error handling | Consistent Result type or removed | Clear patterns, testable |
-| **#2 Bare DB Access** | RedisBroker/AsyncEngine in API | Abstract interfaces with adapters | Swappable implementations |
-| **#3 Router DI** | Magic factory, type checks | Clear RouterRegistry with DI | Explicit dependencies |
-| **#4 UseCase Results** | Mixed Result/raw/None | Consistent Result type everywhere | Testable error handling |
-| **#5 Settings Singleton** | Global mutable state | Constructor-based DI | Clean testing, no side effects |
+| Opportunity               | Current                             | Improved                          | Benefit                        |
+| ------------------------- | ----------------------------------- | --------------------------------- | ------------------------------ |
+| **#1 Course UseCases**    | Incomplete TODOs, no error handling | Consistent Result type or removed | Clear patterns, testable       |
+| **#2 Bare DB Access**     | RedisBroker/AsyncEngine in API      | Abstract interfaces with adapters | Swappable implementations      |
+| **#3 Router DI**          | Magic factory, type checks          | Clear RouterRegistry with DI      | Explicit dependencies          |
+| **#4 UseCase Results**    | Mixed Result/raw/None               | Consistent Result type everywhere | Testable error handling        |
+| **#5 Settings Singleton** | Global mutable state                | Constructor-based DI              | Clean testing, no side effects |
 
 ---
 
@@ -1000,26 +1039,31 @@ def get_default_settings() -> AppSettings:
 ### SOLID Principles Applied
 
 **Single Responsibility** (SRP):
+
 - Course UseCases should either be complete OR removed
 - Settings should not initialize database engine
 - Routers should not decide which routers to load
 
 **Open/Closed** (OCP):
+
 - Add new message broker without changing API code
 - Add new router without modifying RouterRegistry logic
 - Extend settings without breaking existing code
 
 **Liskov Substitution** (LSP):
+
 - All UseCases implement same Result contract
 - All routers inherit from BaseRouter consistently
 - All adapters implement their interface fully
 
 **Interface Segregation** (ISP):
+
 - IMessageBroker has minimal required methods
 - IDatabase has focused methods
 - BaseRouter doesn't expose internal details
 
 **Dependency Inversion** (DIP):
+
 - API depends on abstractions (IMessageBroker)
 - UseCases depend on IUnitOfWork, not concrete implementations
 - Settings passed as constructor arguments, not global singletons
@@ -1064,4 +1108,3 @@ When reviewing code, ask these questions:
 **Last Updated**: 2025-12-31  
 **Created for**: Development team as architecture reference  
 **Next Review**: After implementing Phase 1
-

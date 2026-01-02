@@ -30,12 +30,12 @@
 ### #1: Redis Event Handlers (`app/infrastructure/redis/main.py`)
 
 **Impact**: +1.4% coverage | **Effort**: ⭐⭐ (30 min) | **Priority**: 🟠 MEDIUM  
-**Current Coverage**: 68% → **100%** ✅ **COMPLETED**  
+**Current Coverage**: 68% → **100%** ✅ **COMPLETED**
 
 **Tests Implemented** (`tests/unit/test_redis_handlers_unit.py`): 6 unit tests
 
 1. ✅ `test_startup_connects_when_not_connected` - Verifies broker.connect() awaited when disconnected
-2. ✅ `test_startup_skips_connect_when_already_connected` - Verifies no connect when _connection exists
+2. ✅ `test_startup_skips_connect_when_already_connected` - Verifies no connect when \_connection exists
 3. ✅ `test_handle_incoming_enqueue_event_ack_on_success` - Message ACK on successful processing
 4. ✅ `test_handle_incoming_enqueue_event_nack_on_exception` - Message NACK on error
 5. ✅ `test_handle_processing_event_queue_ack_and_return_processed` - Process, ACK, and return result
@@ -256,12 +256,12 @@ async def test_startup_initialization():
 
 ## 📊 Final Summary (✅ All Phases Complete)
 
-| Phase | Target | Actual | Tests | Time | Status |
-| ----- | ------ | ------ | ----- | ---- | ------ |
-| **1** | 89% | 89% ✅ | 26 tests | ~2h | transition_event() |
-| **2** | 90% | 90% ✅ | 5 tests | ~1.5h | API endpoints |
-| **3** | 92% | 92% ✅ | 6 tests | ~1h | Redis handlers |
-| **TOTAL** | 92% | **92%** ✅ | **37 tests** | **~4.5h** | **GATE ACHIEVED** |
+| Phase     | Target | Actual     | Tests        | Time      | Status             |
+| --------- | ------ | ---------- | ------------ | --------- | ------------------ |
+| **1**     | 89%    | 89% ✅     | 26 tests     | ~2h       | transition_event() |
+| **2**     | 90%    | 90% ✅     | 5 tests      | ~1.5h     | API endpoints      |
+| **3**     | 92%    | 92% ✅     | 6 tests      | ~1h       | Redis handlers     |
+| **TOTAL** | 92%    | **92%** ✅ | **37 tests** | **~4.5h** | **GATE ACHIEVED**  |
 
 **Coverage Progression**:
 

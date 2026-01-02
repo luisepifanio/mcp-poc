@@ -2,10 +2,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_hello_default(client) -> None:
+async def test_hello_default(client: AsyncClient) -> None:
     response = await client.get("/hello")
     assert response.status_code == 200
     data = response.json()
@@ -15,7 +16,7 @@ async def test_hello_default(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_hello_with_name(client) -> None:
+async def test_hello_with_name(client: AsyncClient) -> None:
     response = await client.get("/hello", params={"name": "Luis"})
     assert response.status_code == 200
     data = response.json()
@@ -23,7 +24,7 @@ async def test_hello_with_name(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_add_integers(client) -> None:
+async def test_add_integers(client: AsyncClient) -> None:
     response = await client.get("/add/7/5")
     assert response.status_code == 200
     # FastAPI returns a JSON-encoded primitive for simple return types
@@ -31,7 +32,7 @@ async def test_add_integers(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_cordoba_jokes_returns_nonempty_string(client) -> None:
+async def test_cordoba_jokes_returns_nonempty_string(client: AsyncClient) -> None:
     response = await client.get("/cordoba_jokes")
     assert response.status_code == 200
     joke = response.json()
