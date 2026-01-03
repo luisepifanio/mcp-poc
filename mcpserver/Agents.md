@@ -296,6 +296,60 @@ assert results[0].id == results[1].id
 3. Request 2 → Retorna el evento existente (mismo que Request 1)
 4. ✅ Result: 1 evento en BD, 2 requests retornan idéntico
 
+### 6️⃣ Handler-Managed Transaction Orchestration (NEW - FASE 1-4)
+
+**Patrón**: Handler (infrastructure) abre transacción, UseCase (core) ejecuta sin contexto.
+
+**Beneficios**:
+- Atomicidad: save + publish = 1 transacción
+- Composición: 2+ use cases en 1 transacción
+- Testabilidad: use cases sin context manager
+- Arquitectura: Clean separation (handler orquesta, usecase ejecuta)
+
+**Implementación**:
+
+```python
+# ❌ ANTES (UseCase abre contexto)
+class EnqueueEventUseCase:
+    async def execute(self, input):
+        async with self.uow:  # ❌ UseCase manages TX
+            return save(input)
+
+# ✅ DESPUÉS (Handler abre contexto)
+class EnqueueEventUseCase:
+    async def execute(self, input):
+        # ✅ NO context manager
+        # ✅ Caller (handler) manages TX
+        return save(input)
+
+# Handler orchestrates
+@EventSubscriber
+async def handle_enqueue_event(event, msg, session=Depends(get_session)):
+    try:
+        async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
+            # Handler opens context
+            usecase = EnqueueEventUseCase(uow)
+            result = await usecase.execute(event)
+            
+            if result.is_ok():
+                # Publish within SAME transaction
+                await broker.publish({...}, stream="processing-event-subject")
+                await msg.ack()
+            else:
+                await msg.nack()
+        # Transaction commits here
+    except Exception:
+        await msg.nack()
+```
+
+**Cuando usar**:
+- ✅ Handlers/Workers (orchestrate use cases)
+- ✅ Multiple use cases en single operation
+- ✅ Atomic save + publish patterns
+- ❌ NOT para standalone use cases
+
+**Más información**: [docs/TRANSACTION_PATTERN.md](docs/TRANSACTION_PATTERN.md)
+
 ---
 
 ## 🧪 Testing Strategy
