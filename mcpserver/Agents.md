@@ -1137,7 +1137,7 @@ git push
 
 ---
 
-## 📞 Getting Help
+##  Getting Help
 
 ### Para Agentes IA:
 
