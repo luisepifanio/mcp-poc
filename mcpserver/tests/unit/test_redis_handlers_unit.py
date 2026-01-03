@@ -64,32 +64,120 @@ async def test_subscriber_demo_ack_on_exception() -> None:
 
 
 @pytest.mark.asyncio
-async def test_handle_processing_event_queue_ack_and_return_processed() -> None:
+async def test_handle_processing_event_queue_ack_on_success() -> None:
+    """Test that ack is called on successful processing."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
     from app.infrastructure.redis.main import handle_processing_event_queue
 
     msg = MagicMock()
     msg.ack = AsyncMock()
     msg.nack = AsyncMock()
 
-    body = {"data": 123}
-    result = await handle_processing_event_queue(body, msg)
+    session_mock = AsyncMock()
 
-    msg.ack.assert_awaited_once()
-    msg.nack.assert_not_awaited()
-    assert isinstance(result, dict)
-    assert result == {"processed_data": body}
+    # Mock the entire UnitOfWork context and processor pipeline
+    with patch(
+        "app.infrastructure.redis.main.AsyncSQLAlchemyUnitOfWork"
+    ) as uow_mock_class:
+        uow_mock = AsyncMock()
+        uow_mock.__aenter__.return_value = uow_mock
+        uow_mock.__aexit__.return_value = None
+
+        from uuid import uuid4
+
+        from app.core.entities import Event, EventState
+
+        test_event = Event(
+            id=uuid4(),
+            name="test_event",
+            state=EventState.PENDING,
+            payload={"test": "data"},
+        )
+        uow_mock.events.get_by_id = AsyncMock(return_value=test_event)
+
+        # Mock processor
+        with patch("app.infrastructure.redis.main.processor_registry") as registry_mock:
+            processor_mock = MagicMock()
+            processor_mock.get_retry_config.return_value = MagicMock(
+                max_attempts=3,
+                initial_backoff=0.1,
+                max_backoff=1.0,
+                backoff_multiplier=2.0,
+            )
+            processor_mock.process = AsyncMock(
+                return_value=MagicMock(
+                    status=MagicMock(value="success"), data={"result": "ok"}
+                )
+            )
+            registry_mock.get.return_value = processor_mock
+
+            # Mock ProcessEventUseCase
+            with patch(
+                "app.infrastructure.redis.main.ProcessEventUseCase"
+            ) as usecase_mock_class:
+                usecase_mock = MagicMock()
+                usecase_mock.execute = AsyncMock()
+                usecase_mock_class.return_value = usecase_mock
+
+                uow_mock_class.return_value = uow_mock
+
+                from app.core.usecases.event_usecases import (
+                    EnqueuedEventUseCaseOutput,
+                )
+
+                body = EnqueuedEventUseCaseOutput(
+                    id=test_event.id,
+                    name="test_event",
+                    payload={"test": "data"},
+                    state=EventState.PENDING,
+                )
+
+                result = await handle_processing_event_queue(body, msg, session_mock)
+
+                msg.ack.assert_awaited_once()
+                msg.nack.assert_not_awaited()
+                assert isinstance(result, dict)
 
 
 @pytest.mark.asyncio
-async def test_handle_processing_event_queue_nack_on_exception() -> None:
+async def test_handle_processing_event_queue_nack_on_event_not_found() -> None:
+    """Test that nack is called when event is not found."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
     from app.infrastructure.redis.main import handle_processing_event_queue
 
     msg = MagicMock()
-    msg.ack = AsyncMock(side_effect=Exception("fail"))
+    msg.ack = AsyncMock()
     msg.nack = AsyncMock()
 
-    body = {"data": "x"}
-    result = await handle_processing_event_queue(body, msg)
+    session_mock = AsyncMock()
 
-    msg.nack.assert_awaited_once()
-    assert result is None
+    # Mock the UnitOfWork to simulate event not found
+    with patch(
+        "app.infrastructure.redis.main.AsyncSQLAlchemyUnitOfWork"
+    ) as uow_mock_class:
+        uow_mock = AsyncMock()
+        uow_mock.__aenter__.return_value = uow_mock
+        uow_mock.__aexit__.return_value = None
+        uow_mock.events.get_by_id = AsyncMock(return_value=None)
+        uow_mock_class.return_value = uow_mock
+
+        from uuid import uuid4
+
+        from app.core.entities import EventState
+        from app.core.usecases.event_usecases import (
+            EnqueuedEventUseCaseOutput,
+        )
+
+        body = EnqueuedEventUseCaseOutput(
+            id=uuid4(),
+            name="test_event",
+            payload={},
+            state=EventState.PENDING,
+        )
+
+        result = await handle_processing_event_queue(body, msg, session_mock)
+
+        msg.nack.assert_awaited_once()
+        assert result is None

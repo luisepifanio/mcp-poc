@@ -225,13 +225,24 @@ class ProcessEventUseCase(
         self.uow = uow
 
     async def execute(
-        self, input: EnqueuedEventUseCaseInput
+        self,
+        input: Event | EnqueuedEventUseCaseInput,
+        result_data: JSONDict | None = None,
+        error: str | None = None,
+        processing_metadata: JSONDict | None = None,
+        is_failed: bool = False,
+        is_temporal_error: bool = False,
     ) -> Result[EnqueuedEventUseCaseOutput, ErrorDetail]:
         """
         Execute event processing via processor pattern.
 
         Args:
-            input: Event to process
+            input: Event entity or EnqueuedEventUseCaseInput DTO to process
+            result_data: Optional result data from processor (if SUCCESS)
+            error: Optional error message (if FAILED or ERROR)
+            processing_metadata: Optional metadata to store in context.processing
+            is_failed: If True, mark as FAILED (PERMANENT error)
+            is_temporal_error: If True, mark as TEMPORAL_ERROR (TRANSIENT error)
 
         Returns:
             Result with processed event or error detail
@@ -240,85 +251,63 @@ class ProcessEventUseCase(
 
         from app.core.processor_registry import processor_registry
 
-        # Get processor (may be NoOpProcessor if not registered)
-        processor = processor_registry.get(input.name)
+        # Convert Event entity to EnqueuedEventUseCaseInput if needed
+        if isinstance(input, Event):
+            event_input = EnqueuedEventUseCaseInput(
+                name=input.name,
+                payload=input.payload or {},
+                id=input.id,
+                external_uuid=input.external_uuid,
+                context=input.context or {},
+                state=input.state,
+            )
+        else:
+            event_input = input
 
-        # Transition event PENDING → PROCESSING
-        transition_result = transition_event(input, EventState.PROCESSING)
+        # Get processor (may be NoOpProcessor if not registered)
+        processor = processor_registry.get(event_input.name)
+
+        # Determine final state
+        if is_failed:
+            final_state = EventState.FAILED
+        elif is_temporal_error:
+            final_state = EventState.TEMPORAL_ERROR
+        elif result_data is not None:
+            final_state = EventState.COMPLETED
+        else:
+            final_state = EventState.PROCESSING
+
+        # Transition event to final state
+        transition_result = transition_event(event_input, final_state)
         if transition_result.is_err():
             return Err(transition_result.unwrap_err())
 
-        # Execute processor
-        try:
-            processor_result = await processor.process(input)
+        # Update context with processing metadata
+        if "processing" not in event_input.context:
+            event_input.context["processing"] = {}
 
-            # Update context with processing metadata
-            if "processing" not in input.context:
-                input.context["processing"] = {}
+        event_input.context["processing"]["started_at"] = datetime.now(UTC).isoformat()
+        event_input.context["processing"]["processor"] = processor.__class__.__name__
 
-            input.context["processing"]["started_at"] = datetime.now(UTC).isoformat()
-            input.context["processing"]["processor"] = processor.__class__.__name__
-            input.context["processing"]["type"] = (
-                "async_callback"
-                if processor_result.status.value == "pending_callback"
-                else "sync"
-            )
+        # Add processor-specific metadata if provided
+        if processing_metadata:
+            event_input.context["processing"].update(processing_metadata)
 
-            # Handle processor result
-            if processor_result.status.value == "success":
-                # Sync processor completed successfully
-                input.state = EventState.COMPLETED
-                input.context["processing"]["completed_at"] = datetime.now(
-                    UTC
-                ).isoformat()
-                if processor_result.data:
-                    input.result = processor_result.data
-
-            elif processor_result.status.value == "pending_callback":
-                # Async processor published task, waiting for callback
-                input.state = EventState.PROCESSING
-                if "callback" not in input.context:
-                    input.context["callback"] = {}
-                input.context["callback"]["subject"] = processor_result.callback_subject
-                input.context["callback"]["task_subject"] = processor_result.metadata.get(
-                    "task_subject"
-                )
-                input.context["callback"]["published_at"] = processor_result.metadata.get(
-                    "published_at"
-                )
-
-            else:
-                # Processor failed
-                input.state = EventState.FAILED
-                if "error" not in input.context:
-                    input.context["error"] = {}
-                input.context["error"]["message"] = (
-                    processor_result.error or "Unknown error"
-                )
-                input.context["error"]["processor"] = processor.__class__.__name__
-
-        except Exception as exc:
-            # Classify error to determine retry strategy
-            error_type = processor.classify_error(exc)
-
-            if error_type.value == "permanent":
-                # No retry - mark as failed
-                input.state = EventState.FAILED
-            elif error_type.value == "transient":
-                # Retryable - transition to TEMPORAL_ERROR
-                input.state = EventState.TEMPORAL_ERROR
-            else:  # RATE_LIMIT
-                # Retryable with longer backoff - transition to TEMPORAL_ERROR
-                input.state = EventState.TEMPORAL_ERROR
-
-            if "error" not in input.context:
-                input.context["error"] = {}
-            input.context["error"]["type"] = error_type.value
-            input.context["error"]["message"] = str(exc)
-            input.context["error"]["occurred_at"] = datetime.now(UTC).isoformat()
+        # Store result or error
+        if result_data:
+            event_input.result = result_data
+            event_input.context["processing"]["completed_at"] = datetime.now(
+                UTC
+            ).isoformat()
+        elif error:
+            if "error" not in event_input.context:
+                event_input.context["error"] = {}
+            event_input.context["error"]["message"] = error
+            event_input.context["error"]["processor"] = processor.__class__.__name__
+            event_input.context["error"]["occurred_at"] = datetime.now(UTC).isoformat()
 
         # Save event with all transitions and context updates
-        save_result = await self.uow.events.save(input)
+        save_result = await self.uow.events.save(event_input)
         return save_result.and_then(lambda saved_event: Ok(self.as_output(saved_event)))
 
     def as_output(self, event: Event) -> EnqueuedEventUseCaseOutput:
