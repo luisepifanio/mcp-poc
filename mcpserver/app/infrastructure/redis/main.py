@@ -19,6 +19,7 @@ from tenacity import (
 
 from app.core.usecases.event_usecases import (
     EnqueuedEventUseCaseInput,
+    EnqueuedEventUseCaseOutput,
     EnqueueEventUseCase,
 )
 
@@ -133,22 +134,18 @@ async def handle_enqueue_event(
                             try:
                                 async for publish_attempt in AsyncRetrying(
                                     stop=stop_after_attempt(5),
-                                    wait=wait_exponential(multiplier=0.5, min=0.5, max=10),
-                                    before_sleep=before_sleep_log(logger, logging.WARNING),
+                                    wait=wait_exponential(
+                                        multiplier=0.5, min=0.5, max=10
+                                    ),
+                                    before_sleep=before_sleep_log(
+                                        logger, logging.WARNING
+                                    ),
                                     after=after_log(logger, logging.INFO),
                                     reraise=True,
                                 ):
                                     with publish_attempt:
                                         await broker.publish(
-                                            {
-                                                "event_id": str(value.id),
-                                                "name": value.name,
-                                                "payload": value.payload,
-                                                "state": value.state.value,
-                                                "external_uuid": str(value.external_uuid)
-                                                if value.external_uuid
-                                                else None,
-                                            },
+                                            value,
                                             stream="processing-event-subject",
                                         )
                                         logger.info(
@@ -188,8 +185,9 @@ ProcessingEventSubscriber: Callable[
 @ProcessingEventSubscriber
 @broker.publisher(stream="result-event-subject")  # <-- listen here
 async def handle_processing_event_queue(
-    body: dict[str, Any],
+    body: EnqueuedEventUseCaseOutput,
     msg: RedisMessage,
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any] | None:
     try:
         # Process the claimed message

@@ -2,7 +2,7 @@
 
 **Date**: January 3, 2026  
 **Status**: ✅ Implemented  
-**Library**: tenacity 9.1.2  
+**Library**: tenacity 9.1.2
 
 ---
 
@@ -12,10 +12,10 @@ Implementación de estrategia de reintentos con backoff exponencial para operaci
 
 ### Operaciones con Retry
 
-| Operación | Max Attempts | Base Delay | Max Delay | Total Time | Comportamiento |
-|-----------|--------------|------------|-----------|------------|---------------|
-| **Enqueue** | 3 | 1s | 10s | ~7s | Save evento a DB |
-| **Publish** | 5 | 0.5s | 10s | ~15.5s | Publish a processing stream |
+| Operación   | Max Attempts | Base Delay | Max Delay | Total Time | Comportamiento              |
+| ----------- | ------------ | ---------- | --------- | ---------- | --------------------------- |
+| **Enqueue** | 3            | 1s         | 10s       | ~7s        | Save evento a DB            |
+| **Publish** | 5            | 0.5s       | 10s       | ~15.5s     | Publish a processing stream |
 
 ---
 
@@ -58,12 +58,14 @@ async for attempt in AsyncRetrying(
 ```
 
 **Timeline**:
+
 - Attempt 1: Immediate
 - Attempt 2: After 1s (if failed)
 - Attempt 3: After 2s more (total 3s from start)
 - Total: ~7s before giving up
 
 **Errores retryables**:
+
 - Database connection errors
 - Transaction deadlocks
 - Temporary network issues
@@ -96,6 +98,7 @@ except RetryError as retry_err:
 ```
 
 **Timeline**:
+
 - Attempt 1: Immediate
 - Attempt 2: After 0.5s (if failed)
 - Attempt 3: After 1s more (total 1.5s)
@@ -104,6 +107,7 @@ except RetryError as retry_err:
 - Total: ~15.5s before giving up
 
 **Errores retryables**:
+
 - Redis connection errors
 - Network timeouts
 - Broker temporary unavailability
@@ -126,12 +130,12 @@ INFO: Finished call to app.infrastructure.redis.main.handle_enqueue_event after 
 
 ### Métricas a Monitorear
 
-| Métrica | Descripción | Threshold |
-|---------|-------------|-----------|
-| **retry_count** | # de reintentos por operación | < 2 avg |
-| **retry_success_rate** | % de operaciones exitosas after retry | > 95% |
-| **max_retry_failures** | # de operaciones fallidas after all retries | < 1% |
-| **retry_latency** | Tiempo total incluyendo retries | < 25s p99 |
+| Métrica                | Descripción                                 | Threshold |
+| ---------------------- | ------------------------------------------- | --------- |
+| **retry_count**        | # de reintentos por operación               | < 2 avg   |
+| **retry_success_rate** | % de operaciones exitosas after retry       | > 95%     |
+| **max_retry_failures** | # de operaciones fallidas after all retries | < 1%      |
+| **retry_latency**      | Tiempo total incluyendo retries             | < 25s p99 |
 
 ---
 
@@ -143,7 +147,7 @@ INFO: Finished call to app.infrastructure.redis.main.handle_enqueue_event after 
 Timeline:
 T0:   Attempt 1 → DB lock (fail)
 T1:   Attempt 2 → DB lock released (success)
-      
+
 Result: ✅ Enqueued after 1s
 ```
 
@@ -155,7 +159,7 @@ T0:   Save event → success
       Publish → Redis down (fail)
 T0.5: Publish → Redis still down (fail)
 T1.5: Publish → Redis recovered (success)
-      
+
 Result: ✅ Published after 3 retries (~3.5s)
 ```
 
@@ -166,7 +170,7 @@ Timeline:
 T0:   Enqueue attempt 1 → DB down (fail)
 T1:   Enqueue attempt 2 → DB down (fail)
 T3:   Enqueue attempt 3 → DB down (fail)
-      
+
 Result: ❌ RetryError raised
 Action: msg.nack() → Redis redelivers message
 ```
@@ -181,7 +185,7 @@ Action: msg.nack() → Redis redelivers message
 async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
     # Step 1: Save (with retry)
     result = await usecase.execute(event)
-    
+
     if result.is_ok():
         try:
             # Step 2: Publish (with retry)
@@ -189,12 +193,13 @@ async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
         except RetryError:
             # Publish failed after all retries
             raise  # → Triggers rollback
-    
+
     # Success: Both save + publish succeeded
     # __aexit__ commits transaction
 ```
 
 **Atomicity Preserved**:
+
 - ✅ If save fails → No DB record, no publish
 - ✅ If publish fails → TX rollback, no DB record
 - ✅ If both succeed → Single atomic commit
@@ -267,7 +272,7 @@ async def test_enqueue_retry_on_db_lock():
             Ok(event),             # Attempt 3: success
         ]
     )
-    
+
     # Should succeed on 3rd attempt
     result = await handle_enqueue_event(...)
     assert result.is_ok()
@@ -281,9 +286,9 @@ async def test_publish_rollback_on_all_failures():
     """Test that TX rollback when publish fails after all retries"""
     # Setup: Event saves successfully
     # Setup: Redis broker always fails
-    
+
     result = await handle_enqueue_event(...)
-    
+
     # Verify: Event NOT in DB (rollback occurred)
     assert db_event is None
 ```

@@ -1,4 +1,5 @@
 import json
+from datetime import UTC
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -206,16 +207,130 @@ class ProcessEventUseCase(
         EnqueuedEventUseCaseInput, Result[EnqueuedEventUseCaseOutput, ErrorDetail]
     ]
 ):
+    """
+    Process an event using the processor pattern.
+
+    Flow:
+    1. Get processor from registry (defaults to NoOpProcessor if not registered)
+    2. Execute processor.process(event)
+    3. Handle result:
+       - SUCCESS: Transition PROCESSING → COMPLETED
+       - PENDING_CALLBACK: Transition PENDING → PROCESSING (waiting for callback)
+       - FAILED: Classify error and decide on FAILED vs retry
+    4. Update event context with processing metadata
+    5. Save event with transitions
+    """
+
     def __init__(self, uow: UnitOfWork):
         self.uow = uow
 
     async def execute(
         self, input: EnqueuedEventUseCaseInput
     ) -> Result[EnqueuedEventUseCaseOutput, ErrorDetail]:
-        # Placeholder for processing logic
-        return Err(
-            ErrorDetail(
-                error=ErrorCatalog.UNIMPLENTED.value,
-                detail="ProcessEventUseCase is not implemented yet.",
+        """
+        Execute event processing via processor pattern.
+
+        Args:
+            input: Event to process
+
+        Returns:
+            Result with processed event or error detail
+        """
+        from datetime import datetime
+
+        from app.core.processor_registry import processor_registry
+
+        # Get processor (may be NoOpProcessor if not registered)
+        processor = processor_registry.get(input.name)
+
+        # Transition event PENDING → PROCESSING
+        transition_result = transition_event(input, EventState.PROCESSING)
+        if transition_result.is_err():
+            return Err(transition_result.unwrap_err())
+
+        # Execute processor
+        try:
+            processor_result = await processor.process(input)
+
+            # Update context with processing metadata
+            if "processing" not in input.context:
+                input.context["processing"] = {}
+
+            input.context["processing"]["started_at"] = datetime.now(
+                UTC
+            ).isoformat()
+            input.context["processing"]["processor"] = processor.__class__.__name__
+            input.context["processing"]["type"] = (
+                "async_callback"
+                if processor_result.status.value == "pending_callback"
+                else "sync"
             )
+
+            # Handle processor result
+            if processor_result.status.value == "success":
+                # Sync processor completed successfully
+                input.state = EventState.COMPLETED
+                input.context["processing"]["completed_at"] = datetime.now(
+                    UTC
+                ).isoformat()
+                if processor_result.data:
+                    input.result = processor_result.data
+
+            elif processor_result.status.value == "pending_callback":
+                # Async processor published task, waiting for callback
+                input.state = EventState.PROCESSING
+                if "callback" not in input.context:
+                    input.context["callback"] = {}
+                input.context["callback"]["subject"] = processor_result.callback_subject
+                input.context["callback"]["task_subject"] = processor_result.metadata.get(
+                    "task_subject"
+                )
+                input.context["callback"]["published_at"] = processor_result.metadata.get(
+                    "published_at"
+                )
+
+            else:
+                # Processor failed
+                input.state = EventState.FAILED
+                if "error" not in input.context:
+                    input.context["error"] = {}
+                input.context["error"]["message"] = processor_result.error or "Unknown error"
+                input.context["error"]["processor"] = processor.__class__.__name__
+
+        except Exception as exc:
+            # Classify error to determine retry strategy
+            error_type = processor.classify_error(exc)
+
+            if error_type.value == "permanent":
+                # No retry - mark as failed
+                input.state = EventState.FAILED
+            elif error_type.value == "transient":
+                # Retryable - transition to TEMPORAL_ERROR
+                input.state = EventState.TEMPORAL_ERROR
+            else:  # RATE_LIMIT
+                # Retryable with longer backoff - transition to TEMPORAL_ERROR
+                input.state = EventState.TEMPORAL_ERROR
+
+            if "error" not in input.context:
+                input.context["error"] = {}
+            input.context["error"]["type"] = error_type.value
+            input.context["error"]["message"] = str(exc)
+            input.context["error"]["occurred_at"] = datetime.now(UTC).isoformat()
+
+        # Save event with all transitions and context updates
+        save_result = await self.uow.events.save(input)
+        return save_result.and_then(
+            lambda saved_event: Ok(self.as_output(saved_event))
+        )
+
+    def as_output(self, event: Event) -> EnqueuedEventUseCaseOutput:
+        """Convert event entity to output DTO."""
+        return EnqueuedEventUseCaseOutput(
+            id=event.id,
+            name=event.name,
+            state=event.state,
+            external_uuid=event.external_uuid,
+            payload=event.payload,
+            context=event.context,
+            result=event.result,
         )

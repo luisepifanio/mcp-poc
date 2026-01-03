@@ -3,7 +3,7 @@
 **Date**: January 3, 2026  
 **Status**: 📋 Backlog (Not Implemented)  
 **Priority**: HIGH  
-**Estimated Effort**: 3-5 days  
+**Estimated Effort**: 3-5 days
 
 ---
 
@@ -16,10 +16,12 @@
 Eventos pueden quedar "atascados" en estados `CREATED` o `PENDING` por varios motivos:
 
 1. **Sistema caído durante procesamiento**
+
    - App crashea después de crear evento pero antes de publicar
    - Redis down durante publish (mensaje nack'd pero no reintentado)
 
 2. **Failures after max retries**
+
    - Retry strategy agota intentos (3x enqueue, 5x publish)
    - Mensaje nack'd pero no hay más consumers para reprocesar
 
@@ -30,6 +32,7 @@ Eventos pueden quedar "atascados" en estados `CREATED` o `PENDING` por varios mo
 ### Objetivo
 
 Implementar **background task/job** que periódicamente:
+
 - Identifica eventos "atascados" (CREATED/PENDING más allá de threshold)
 - Los reprocesa automáticamente
 - Registra intentos de recovery para auditoría
@@ -83,7 +86,7 @@ class RecoverStuckEventsUseCase(AsyncUseCase):
     def __init__(self, uow: IUnitOfWork, broker: RedisBroker):
         self.uow = uow
         self.broker = broker
-    
+
     async def execute(
         self, input: RecoverStuckEventsUseCaseInput
     ) -> Result[RecoverStuckEventsUseCaseOutput, ErrorDetail]:
@@ -94,12 +97,12 @@ class RecoverStuckEventsUseCase(AsyncUseCase):
                 threshold_minutes=input.threshold_minutes,
                 limit=input.batch_size,
             )
-            
+
             recovered = 0
             failed = 0
             skipped = 0
             event_ids = []
-            
+
             for event in stuck_events:
                 # 2. Check recovery attempts
                 if event.recovery_attempt_count >= input.max_recovery_attempts:
@@ -109,7 +112,7 @@ class RecoverStuckEventsUseCase(AsyncUseCase):
                         f"({event.recovery_attempt_count})"
                     )
                     continue
-                
+
                 # 3. Republish to Redis
                 try:
                     await self.broker.publish(
@@ -120,21 +123,21 @@ class RecoverStuckEventsUseCase(AsyncUseCase):
                         },
                         stream="enqueue-event-subject",
                     )
-                    
+
                     # 4. Update metadata
                     event.recovery_attempt_count += 1
                     event.last_recovery_at = datetime.utcnow()
                     await self.uow.events.save(event)
-                    
+
                     recovered += 1
                     event_ids.append(event.id)
-                    
+
                 except Exception as e:
                     logger.error(f"Failed to recover event {event.id}: {e}")
                     failed += 1
-            
+
             await self.uow.commit()
-            
+
             return Ok(RecoverStuckEventsUseCaseOutput(
                 recovered_count=recovered,
                 failed_count=failed,
@@ -156,12 +159,12 @@ async def find_stuck_events(
 ) -> list[Event]:
     """
     Find events in given states that are older than threshold.
-    
+
     Args:
         states: List of states to filter (e.g., [CREATED, PENDING])
         threshold_minutes: Age threshold in minutes
         limit: Max events to return
-    
+
     Returns:
         List of stuck events ordered by created_at (oldest first)
     """
@@ -175,7 +178,7 @@ async def find_stuck_events(
     limit: int = 100,
 ) -> list[Event]:
     threshold_time = datetime.utcnow() - timedelta(minutes=threshold_minutes)
-    
+
     stmt = (
         select(Event)
         .where(
@@ -185,7 +188,7 @@ async def find_stuck_events(
         .order_by(Event.created_at.asc())
         .limit(limit)
     )
-    
+
     result = await self.session.execute(stmt)
     return result.scalars().all()
 ```
@@ -199,11 +202,11 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 def setup_scheduler(broker: RedisBroker, session_factory):
     scheduler = AsyncIOScheduler()
-    
+
     async def recover_stuck_events_job():
         """Periodic job to recover stuck events"""
         logger.info("Starting stuck events recovery job")
-        
+
         async with session_factory() as session:
             async with AsyncSQLAlchemyUnitOfWork(session, owns_session=True) as uow:
                 use_case = RecoverStuckEventsUseCase(uow=uow, broker=broker)
@@ -214,7 +217,7 @@ def setup_scheduler(broker: RedisBroker, session_factory):
                         batch_size=50,
                     )
                 )
-                
+
                 if result.is_ok():
                     output = result.unwrap()
                     logger.info(
@@ -225,7 +228,7 @@ def setup_scheduler(broker: RedisBroker, session_factory):
                     )
                 else:
                     logger.error(f"Recovery job failed: {result.unwrap_err()}")
-    
+
     # Run every 5 minutes
     scheduler.add_job(
         recover_stuck_events_job,
@@ -234,14 +237,14 @@ def setup_scheduler(broker: RedisBroker, session_factory):
         name="Recover Stuck Events Job",
         replace_existing=True,
     )
-    
+
     return scheduler
 
 # En app/infrastructure/api/main.py (startup)
 @app.on_event("startup")
 async def startup():
     # ... existing code ...
-    
+
     # Start scheduler
     scheduler = setup_scheduler(broker, get_session_factory())
     scheduler.start()
@@ -258,7 +261,7 @@ async def startup():
 # En Event entity (app/core/entities.py)
 class Event(SQLModel, table=True):
     # ... existing fields ...
-    
+
     # Recovery metadata (NEW)
     recovery_attempt_count: int = Field(default=0)
     last_recovery_at: datetime | None = Field(default=None)
@@ -303,14 +306,14 @@ async def test_find_stuck_events(uow_factory, dbsession):
     )
     dbsession.add_all([old_pending, recent_pending])
     await dbsession.commit()
-    
+
     # Test: Find stuck events (threshold=10min)
     async with uow_factory() as uow:
         stuck = await uow.events.find_stuck_events(
             states=[EventState.PENDING],
             threshold_minutes=10,
         )
-    
+
     # Assert: Only old event returned
     assert len(stuck) == 1
     assert stuck[0].id == old_pending.id
@@ -325,10 +328,10 @@ async def test_recover_stuck_events_use_case(uow_mock, broker_mock):
         recovery_attempt_count=0,
     )
     uow_mock.events.find_stuck_events = AsyncMock(return_value=[stuck_event])
-    
+
     use_case = RecoverStuckEventsUseCase(uow=uow_mock, broker=broker_mock)
     result = await use_case.execute(RecoverStuckEventsUseCaseInput())
-    
+
     assert result.is_ok()
     output = result.unwrap()
     assert output.recovered_count == 1
@@ -350,16 +353,16 @@ async def test_recovery_job_end_to_end(uow_factory, broker, dbsession):
     )
     dbsession.add(stuck_event)
     await dbsession.commit()
-    
+
     # Step 2: Run recovery job
     async with uow_factory() as uow:
         use_case = RecoverStuckEventsUseCase(uow=uow, broker=broker)
         result = await use_case.execute(RecoverStuckEventsUseCaseInput())
-    
+
     # Step 3: Verify republished
     assert result.is_ok()
     assert result.unwrap().recovered_count == 1
-    
+
     # Step 4: Verify metadata updated
     await dbsession.refresh(stuck_event)
     assert stuck_event.recovery_attempt_count == 1
@@ -372,12 +375,12 @@ async def test_recovery_job_end_to_end(uow_factory, broker, dbsession):
 
 ### Métricas a Trackear
 
-| Métrica | Descripción | Alert Threshold |
-|---------|-------------|----------------|
-| `stuck_events_count` | # eventos atascados por run | > 10 |
-| `recovery_success_rate` | % recoveries exitosos | < 90% |
-| `recovery_job_duration` | Tiempo de ejecución del job | > 60s |
-| `max_recovery_attempts_exceeded` | # eventos con 3+ recovery attempts | > 5 |
+| Métrica                          | Descripción                        | Alert Threshold |
+| -------------------------------- | ---------------------------------- | --------------- |
+| `stuck_events_count`             | # eventos atascados por run        | > 10            |
+| `recovery_success_rate`          | % recoveries exitosos              | < 90%           |
+| `recovery_job_duration`          | Tiempo de ejecución del job        | > 60s           |
+| `max_recovery_attempts_exceeded` | # eventos con 3+ recovery attempts | > 5             |
 
 ### Dashboard Panel (Grafana)
 
@@ -447,6 +450,7 @@ rate(recovery_success_total[1h]) / rate(recovery_attempts_total[1h])
 ### Rollback Plan
 
 Si recovery job causa problemas:
+
 1. Disable scheduler via feature flag
 2. Mark stuck events manualmente
 3. Investigate root cause
