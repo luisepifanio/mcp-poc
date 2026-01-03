@@ -2,12 +2,20 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from faststream import AckPolicy, Context, ContextRepo, FastStream
+from faststream import AckPolicy, Context, ContextRepo, Depends, FastStream
 from faststream.redis import RedisBroker, StreamSub
 from faststream.redis.annotations import RedisMessage
 from faststream.redis.subscriber.usecases import StreamBatchSubscriber, StreamSubscriber
+from result import Ok
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.usecases.event_usecases import EnqueuedEventUseCaseInput
+from app.core.usecases.event_usecases import (
+    EnqueuedEventUseCaseInput,
+    EnqueueEventUseCase,
+)
+
+from ..db.connection import get_session
+from ..db.unit_of_work import AsyncSQLAlchemyUnitOfWork
 
 logger = logging.getLogger(__name__)
 # Configuración del broker de Redis
@@ -16,14 +24,14 @@ app = FastStream(broker)
 
 
 def setup_redis_suscriber(
-    subject_name: str, min_idle_time: int = 5000
+    subject_name: str, min_idle_time: int = 5000, ack_policy: AckPolicy = AckPolicy.MANUAL
 ) -> StreamSubscriber | StreamBatchSubscriber:
     return broker.subscriber(
         stream=StreamSub(
             subject_name,
             min_idle_time=min_idle_time,
         ),
-        ack_policy=AckPolicy.MANUAL,
+        ack_policy=ack_policy,
     )
 
 
@@ -67,24 +75,28 @@ async def shutdown(context: Any = Context()) -> None:
 # Decorador tipado correctamente
 EnqueueEventSubscriber: Callable[
     [Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]
-] = broker.subscriber(
-    stream=StreamSub(
-        "enqueue-event-subject",
-        min_idle_time=5000,
-    ),
-    ack_policy=AckPolicy.MANUAL,
-)
+] = setup_redis_suscriber("enqueue-event-subject")
 
 
 @EnqueueEventSubscriber
 async def handle_enqueue_event(
     event: EnqueuedEventUseCaseInput,
     msg: RedisMessage,
+    session: AsyncSession = Depends(get_session),
 ) -> None:
     try:
         logger.info(f"Evento recibido: {event}")
-        # Procesa el mensaje aquí
-        await msg.ack()
+        # owns_session=False because session is managed by FastAPI Depends (get_session)
+        uow = AsyncSQLAlchemyUnitOfWork(session, owns_session=False)
+        usecase = EnqueueEventUseCase(uow)
+        result = await usecase.execute(event)
+        match result:
+            case Ok(value):
+                logger.info(f"Evento encolado con éxito: {value}")
+                await msg.ack()
+            case _:
+                logger.error(f"Error al encolar el evento: {result}")
+                await msg.nack()
     except Exception as e:
         logger.error(f"Error al procesar el mensaje: {e}")
         await msg.nack()
@@ -93,13 +105,7 @@ async def handle_enqueue_event(
 # Decorador tipado correctamente
 ProcessingEventSubscriber: Callable[
     [Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]
-] = broker.subscriber(
-    stream=StreamSub(
-        "processing-event-subject",
-        min_idle_time=5000,
-    ),
-    ack_policy=AckPolicy.MANUAL,
-)
+] = setup_redis_suscriber("processing-event-subject")
 
 
 @ProcessingEventSubscriber
