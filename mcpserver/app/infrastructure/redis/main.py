@@ -86,17 +86,21 @@ async def handle_enqueue_event(
 ) -> None:
     try:
         logger.info(f"Evento recibido: {event}")
-        # owns_session=False because session is managed by FastAPI Depends (get_session)
-        uow = AsyncSQLAlchemyUnitOfWork(session, owns_session=False)
-        usecase = EnqueueEventUseCase(uow)
-        result = await usecase.execute(event)
-        match result:
-            case Ok(value):
-                logger.info(f"Evento encolado con éxito: {value}")
-                await msg.ack()
-            case _:
-                logger.error(f"Error al encolar el evento: {result}")
-                await msg.nack()
+        # FASE 2: Handler manages transaction context (owns_session=False)
+        # UseCase has been refactored to assume caller manages transaction
+        # See: docs/TRANSACTION_PATTERN.md
+        async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
+            usecase = EnqueueEventUseCase(uow)
+            result = await usecase.execute(event)
+            match result:
+                case Ok(value):
+                    logger.info(f"Evento encolado con éxito: {value}")
+                    # MEJORA #2: TODO - Publish to processing-event-subject here
+                    # Once publish is inside context, atomicity is guaranteed
+                    await msg.ack()
+                case _:
+                    logger.error(f"Error al encolar el evento: {result}")
+                    await msg.nack()
     except Exception as e:
         logger.error(f"Error al procesar el mensaje: {e}")
         await msg.nack()
