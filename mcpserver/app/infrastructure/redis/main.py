@@ -86,7 +86,7 @@ async def handle_enqueue_event(
 ) -> None:
     try:
         logger.info(f"Evento recibido: {event}")
-        # FASE 2: Handler manages transaction context (owns_session=False)
+        # Handler manages transaction context (owns_session=False)
         # UseCase has been refactored to assume caller manages transaction
         # See: docs/TRANSACTION_PATTERN.md
         async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
@@ -95,8 +95,20 @@ async def handle_enqueue_event(
             match result:
                 case Ok(value):
                     logger.info(f"Evento encolado con éxito: {value}")
-                    # MEJORA #2: TODO - Publish to processing-event-subject here
-                    # Once publish is inside context, atomicity is guaranteed
+                    # MEJORA #2: Publish to processing-event-subject
+                    # Within same transaction for atomicity guarantee
+                    # If publish fails, entire TX (save + publish) rolls back
+                    await broker.publish(
+                        {
+                            "event_id": str(value.id),
+                            "name": value.name,
+                            "payload": value.payload,
+                            "state": value.state.value,
+                            "external_uuid": str(value.external_uuid) if value.external_uuid else None,
+                        },
+                        stream="processing-event-subject",
+                    )
+                    logger.info(f"Evento publicado en processing stream: {value.id}")
                     await msg.ack()
                 case _:
                     logger.error(f"Error al encolar el evento: {result}")
