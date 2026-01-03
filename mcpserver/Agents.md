@@ -301,6 +301,7 @@ assert results[0].id == results[1].id
 **Patrón**: Handler (infrastructure) abre transacción, UseCase (core) ejecuta sin contexto.
 
 **Beneficios**:
+
 - Atomicidad: save + publish = 1 transacción
 - Composición: 2+ use cases en 1 transacción
 - Testabilidad: use cases sin context manager
@@ -330,7 +331,7 @@ async def handle_enqueue_event(event, msg, session=Depends(get_session)):
             # Handler opens context
             usecase = EnqueueEventUseCase(uow)
             result = await usecase.execute(event)
-            
+
             if result.is_ok():
                 # Publish within SAME transaction
                 await broker.publish({...}, stream="processing-event-subject")
@@ -343,6 +344,7 @@ async def handle_enqueue_event(event, msg, session=Depends(get_session)):
 ```
 
 **Cuando usar**:
+
 - ✅ Handlers/Workers (orchestrate use cases)
 - ✅ Multiple use cases en single operation
 - ✅ Atomic save + publish patterns

@@ -104,7 +104,9 @@ async def handle_enqueue_event(
                             "name": value.name,
                             "payload": value.payload,
                             "state": value.state.value,
-                            "external_uuid": str(value.external_uuid) if value.external_uuid else None,
+                            "external_uuid": str(value.external_uuid)
+                            if value.external_uuid
+                            else None,
                         },
                         stream="processing-event-subject",
                     )

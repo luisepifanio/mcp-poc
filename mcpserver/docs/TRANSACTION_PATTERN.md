@@ -2,7 +2,7 @@
 
 **Date**: January 3, 2026  
 **Status**: ✅ Implemented and Validated  
-**Pattern**: Handler-Managed Transaction Orchestration  
+**Pattern**: Handler-Managed Transaction Orchestration
 
 ---
 
@@ -20,24 +20,24 @@ async def handle_enqueue_event(
 ) -> None:
     # ✅ Handler OPENS transaction context
     async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
-        
+
         # ✅ Instantiate use case with UoW
         usecase = EnqueueEventUseCase(uow)
-        
+
         # ✅ UseCase executes WITHOUT context manager
         result = await usecase.execute(event)
-        
+
         # ✅ Check result and decide
         if result.is_ok():
             event_saved = result.unwrap()
-            
+
             # ✅ Publish within SAME transaction (atomic)
             await broker.publish({...}, stream="processing-event-subject")
-            
+
             await msg.ack()
         else:
             await msg.nack()
-    
+
     # ✅ Transaction COMMITS/ROLLBACKS on exit
 ```
 
@@ -46,14 +46,14 @@ async def handle_enqueue_event(
 class EnqueueEventUseCase(AsyncUseCase[...]):
     def __init__(self, uow: UnitOfWork):
         self.uow = uow
-    
+
     async def execute(
         self, input: EnqueuedEventUseCaseInput
     ) -> Result[EnqueuedEventUseCaseOutput, ErrorDetail]:
         # ✅ NO context manager here
         # ✅ Assumes caller manages transaction
         # See: docs/TRANSACTION_PATTERN.md
-        
+
         # Pure business logic
         evt = Event(...)
         return await self.uow.events.save_or_resolve_one(evt)
@@ -78,20 +78,21 @@ async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
     pass
 ```
 
-**Rule**: 
+**Rule**:
+
 - `owns_session=False` when session comes from `Depends(get_session)`
 - `owns_session=True` when handler creates session directly
 
 ### 2. **Handler Responsibilities**
 
-| Responsibility | Where | Why |
-|---|---|---|
-| **Open transaction** | Handler `async with` | Orchestrates multiple use cases |
-| **Create use case** | Handler (inside context) | Ensures UseCase has active TX |
-| **Execute use case** | UseCase (pure logic) | Business logic isolated |
-| **Publish events** | Handler (inside context) | Guarantees atomicity |
-| **Commit/Rollback** | Handler `__aexit__` | Atomic operation |
-| **Message ack/nack** | Handler (after context) | Acknowledge only after commit |
+| Responsibility       | Where                    | Why                             |
+| -------------------- | ------------------------ | ------------------------------- |
+| **Open transaction** | Handler `async with`     | Orchestrates multiple use cases |
+| **Create use case**  | Handler (inside context) | Ensures UseCase has active TX   |
+| **Execute use case** | UseCase (pure logic)     | Business logic isolated         |
+| **Publish events**   | Handler (inside context) | Guarantees atomicity            |
+| **Commit/Rollback**  | Handler `__aexit__`      | Atomic operation                |
+| **Message ack/nack** | Handler (after context)  | Acknowledge only after commit   |
 
 ### 3. **UseCase Assumptions**
 
@@ -101,12 +102,12 @@ Every UseCase should have a docstring stating:
 class MyUseCase(AsyncUseCase[Input, Result[Output, Error]]):
     """
     Business logic for MyDomain.
-    
+
     ASSUMES: Caller manages transaction context.
     - Do NOT use 'async with self.uow'
     - Caller opens UoW context before instantiating this use case
     - All database operations within same transaction
-    
+
     See: docs/TRANSACTION_PATTERN.md
     """
 ```
@@ -127,15 +128,15 @@ async def handle_enqueue_event(
 ) -> None:
     try:
         logger.info(f"Event received: {event}")
-        
+
         # Step 1: Open transaction context
         async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
             # Step 2: Create use case
             usecase = EnqueueEventUseCase(uow)
-            
+
             # Step 3: Execute (no context manager in usecase)
             result = await usecase.execute(event)
-            
+
             # Step 4: Check result
             match result:
                 case Ok(value):
@@ -154,7 +155,7 @@ async def handle_enqueue_event(
                 case Err(error):
                     logger.error(f"Enqueue failed: {error}")
                     await msg.nack()
-        
+
         # Step 7: On exit, transaction commits
     except Exception as e:
         logger.error(f"Handler error: {e}")
@@ -176,26 +177,26 @@ async def handle_complex_event(
             # UseCase 1: Enqueue event
             enqueue_uc = EnqueueEventUseCase(uow)
             result1 = await enqueue_uc.execute(event.to_input())
-            
+
             if not result1.is_ok():
                 raise ValueError(f"Enqueue failed: {result1}")
-            
+
             saved_event = result1.unwrap()
-            
+
             # UseCase 2: Process event (reuse same UoW)
             process_uc = ProcessEventUseCase(uow)
             result2 = await process_uc.execute(
                 ProcessEventInput(event_id=saved_event.id)
             )
-            
+
             if not result2.is_ok():
                 # Both rollback together
                 raise ValueError(f"Process failed: {result2}")
-            
+
             # Both succeed = publish
             await broker.publish({...}, stream="...")
             await msg.ack()
-        
+
         # Single COMMIT: both save + process + publish atomic
     except Exception as e:
         logger.error(f"Handler error: {e}")
@@ -218,18 +219,18 @@ async def test_handler_pattern_transaction_orchestration(
         external_uuid=uuid4(),
         payload={"test": "data"},
     )
-    
+
     # Simulate what the handler does
     async with AsyncSQLAlchemyUnitOfWork(dbsession, owns_session=False) as uow:
         # Handler instantiates usecase
         usecase = EnqueueEventUseCase(uow)
-        
+
         # Handler executes (usecase has NO async with)
         result = await usecase.execute(event_input)
-        
+
         assert result.is_ok()
         # At this point: transaction is OPEN
-    
+
     # After exit: transaction COMMITS
     # Verify persistence
     stmt = select(Event).where(Event.name == "TestEvent")
@@ -302,7 +303,7 @@ When creating a new use case, follow this checklist:
 - [ ] Inherit from AsyncUseCase[Input, Result[Output, Error]]
 - [ ] Add docstring with "ASSUMES: Caller manages transaction"
 - [ ] Do NOT use 'async with self.uow' in execute()
-- [ ] All database operations via self.uow (injected in __init__)
+- [ ] All database operations via self.uow (injected in **init**)
 - [ ] Return Result type (Ok or Err)
 - [ ] Add unit tests with mock UoW (no context manager)
 - [ ] Add functional tests with real UoW in context
@@ -321,27 +322,27 @@ from result import Ok, Err, Result
 class MyUseCase(AsyncUseCase[MyInput, Result[MyOutput, ErrorDetail]]):
     """
     Business logic for MyDomain.
-    
+
     ASSUMES: Caller manages transaction context.
     - Do NOT use 'async with self.uow'
     - Caller opens UoW context before instantiating this use case
     - All database operations within same transaction
-    
+
     See: docs/TRANSACTION_PATTERN.md
     """
-    
+
     def __init__(self, uow: UnitOfWork):
         self.uow = uow
-    
+
     async def execute(
         self, input: MyInput
     ) -> Result[MyOutput, ErrorDetail]:
         """
         Execute MyDomain business logic.
-        
+
         Args:
             input: MyInput with required fields
-        
+
         Returns:
             Result[MyOutput, ErrorDetail]
         """
@@ -350,16 +351,16 @@ class MyUseCase(AsyncUseCase[MyInput, Result[MyOutput, ErrorDetail]]):
             RootModel[MyInput](input)
         except ValidationError as exc:
             return Err(ErrorDetail(...))
-        
+
         # Business logic (no async with)
         entity = MyEntity(...)
         op_result = await self.uow.my_repo.save(entity)
-        
+
         # Map to output
         return op_result.and_then(
             lambda saved: Ok(self.as_output(saved))
         )
-    
+
     def as_output(self, entity: MyEntity) -> MyOutput:
         return MyOutput(...)
 ```
@@ -368,14 +369,14 @@ class MyUseCase(AsyncUseCase[MyInput, Result[MyOutput, ErrorDetail]]):
 
 ## 📊 When to Use This Pattern
 
-| Scenario | Recommendation |
-|----------|---|
-| Single UseCase, single operation | ✅ Use pattern |
-| Multiple UseCases in one handler | ✅ Use pattern (compose) |
-| Testing UseCase logic | ✅ Wrap in context in test |
-| FastAPI endpoint | ✅ Use pattern (with Depends) |
-| Worker/Job handler | ✅ Use pattern |
-| CLI command | ✅ Use pattern |
+| Scenario                         | Recommendation                |
+| -------------------------------- | ----------------------------- |
+| Single UseCase, single operation | ✅ Use pattern                |
+| Multiple UseCases in one handler | ✅ Use pattern (compose)      |
+| Testing UseCase logic            | ✅ Wrap in context in test    |
+| FastAPI endpoint                 | ✅ Use pattern (with Depends) |
+| Worker/Job handler               | ✅ Use pattern                |
+| CLI command                      | ✅ Use pattern                |
 
 ---
 
