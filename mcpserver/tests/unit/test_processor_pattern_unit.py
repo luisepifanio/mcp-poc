@@ -174,7 +174,9 @@ class TestErrorClassification:
         """Test that ValidationError is classified as PERMANENT."""
         processor = MockProcessor()
 
-        error_type = processor.classify_error(ValidationError.from_exception_data("test", []))
+        error_type = processor.classify_error(
+            ValidationError.from_exception_data("test", [])
+        )
 
         assert error_type == ErrorType.PERMANENT
 

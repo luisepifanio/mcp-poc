@@ -27,7 +27,9 @@ class TaskCallbackPayload(BaseModel):
 
     event_id: UUID = Field(..., description="Event ID being processed")
     status: str = Field(
-        ..., description="Task status: 'success' or 'failed'", pattern="^(success|failed)$"
+        ...,
+        description="Task status: 'success' or 'failed'",
+        pattern="^(success|failed)$",
     )
     result: dict[str, Any] | None = Field(
         default=None, description="Task result data (if successful)"

@@ -256,9 +256,7 @@ class ProcessEventUseCase(
             if "processing" not in input.context:
                 input.context["processing"] = {}
 
-            input.context["processing"]["started_at"] = datetime.now(
-                UTC
-            ).isoformat()
+            input.context["processing"]["started_at"] = datetime.now(UTC).isoformat()
             input.context["processing"]["processor"] = processor.__class__.__name__
             input.context["processing"]["type"] = (
                 "async_callback"
@@ -294,7 +292,9 @@ class ProcessEventUseCase(
                 input.state = EventState.FAILED
                 if "error" not in input.context:
                     input.context["error"] = {}
-                input.context["error"]["message"] = processor_result.error or "Unknown error"
+                input.context["error"]["message"] = (
+                    processor_result.error or "Unknown error"
+                )
                 input.context["error"]["processor"] = processor.__class__.__name__
 
         except Exception as exc:
@@ -319,9 +319,7 @@ class ProcessEventUseCase(
 
         # Save event with all transitions and context updates
         save_result = await self.uow.events.save(input)
-        return save_result.and_then(
-            lambda saved_event: Ok(self.as_output(saved_event))
-        )
+        return save_result.and_then(lambda saved_event: Ok(self.as_output(saved_event)))
 
     def as_output(self, event: Event) -> EnqueuedEventUseCaseOutput:
         """Convert event entity to output DTO."""

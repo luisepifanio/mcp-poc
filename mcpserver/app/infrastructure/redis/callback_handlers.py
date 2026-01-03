@@ -106,9 +106,7 @@ async def handle_task_callback(
                 # Record callback reception
                 if "callback" not in event.context:
                     event.context["callback"] = {}
-                event.context["callback"]["received_at"] = datetime.now(
-                    UTC
-                ).isoformat()
+                event.context["callback"]["received_at"] = datetime.now(UTC).isoformat()
                 event.context["callback"]["status"] = "success"
                 if body.metadata:
                     event.context["callback"]["metadata"] = body.metadata
@@ -124,16 +122,12 @@ async def handle_task_callback(
                     event.context["error"] = {}
                 event.context["error"]["type"] = "task_failed"
                 event.context["error"]["message"] = body.error or "Task failed"
-                event.context["error"]["occurred_at"] = datetime.now(
-                    UTC
-                ).isoformat()
+                event.context["error"]["occurred_at"] = datetime.now(UTC).isoformat()
 
                 # Record callback reception
                 if "callback" not in event.context:
                     event.context["callback"] = {}
-                event.context["callback"]["received_at"] = datetime.now(
-                    UTC
-                ).isoformat()
+                event.context["callback"]["received_at"] = datetime.now(UTC).isoformat()
                 event.context["callback"]["status"] = "failed"
                 if body.metadata:
                     event.context["callback"]["metadata"] = body.metadata

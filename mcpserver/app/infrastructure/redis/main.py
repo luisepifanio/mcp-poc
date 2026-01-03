@@ -187,7 +187,6 @@ ProcessingEventSubscriber: Callable[
 async def handle_processing_event_queue(
     body: EnqueuedEventUseCaseOutput,
     msg: RedisMessage,
-    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any] | None:
     try:
         # Process the claimed message

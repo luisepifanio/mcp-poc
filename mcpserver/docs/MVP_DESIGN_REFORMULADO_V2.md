@@ -2,7 +2,7 @@
 
 **Fecha**: 3 de enero de 2026  
 **Status**: 📋 DISEÑO REFORMULADO V2  
-**Cambios**: Event states, Topic strategy, Processor registry, NoOp detector  
+**Cambios**: Event states, Topic strategy, Processor registry, NoOp detector
 
 ---
 
@@ -10,9 +10,10 @@
 
 ### 1. EventState Analysis: WAITING_CALLBACK vs PROCESSING
 
-**Conclusión**: **No es necesario WAITING_CALLBACK** 
+**Conclusión**: **No es necesario WAITING_CALLBACK**
 
 **Rationale**:
+
 - PROCESSING ya cubre ambos casos (sync request/response Y async callback)
 - La diferencia es en **metadata dentro de Event.context**, no en el estado
 - PROCESSING → COMPLETED aplica para ambos (solo cambia timing)
@@ -52,6 +53,7 @@ event.context = {
 ```
 
 **Estados Finales**:
+
 ```
 CREATED → PENDING → PROCESSING → COMPLETED/FAILED/EXHAUSTED
                          ↓
@@ -80,14 +82,15 @@ Task Subject (Configurable por Processor):
 Result Subject (UNIFICADO):
   "event-result-{event_id}"
   (same para todos)
-  
-Ventaja: 
+
+Ventaja:
 - Callbacks siempre en mismo patrón
 - No wildcard subscribers (mejor performance)
 - Facilita monitoreo (all results en patrón predecible)
 ```
 
 **Redis Setup**:
+
 ```python
 # Task subjects (uno por processor type)
 SCRAPING_TASK_SUBJECT = "scraping-task-subject"
@@ -103,6 +106,7 @@ async def handle_task_callback(...)
 ```
 
 **¿Dynamic Topics Overhead?**
+
 - Redis Streams: Crear topic dinámico ~0ms (es lazy-create)
 - No hay overhead significativo
 - Decisión: **SÍ usar dynamic topics por evento**
@@ -114,6 +118,7 @@ async def handle_task_callback(...)
 **Decision**: **BaseModel para callbacks** (más type-safe)
 
 **Rationale**:
+
 - Pydantic validation automática
 - Serializable directo
 - Compatible con Event.result (EventResultStructure)
@@ -149,11 +154,11 @@ async def handle_task_callback(
 class NoOpProcessor(IEventProcessor):
     """
     Default processor for events without explicit handler.
-    
+
     Marks event as FAILED (not retryable) with monitoring info.
     Purpose: Catch new event types that haven't been added to catalog.
     """
-    
+
     async def process(self, event: Event) -> ProcessorResult:
         # Log for monitoring
         logger.warning(
@@ -164,9 +169,9 @@ class NoOpProcessor(IEventProcessor):
                 "payload_keys": list(event.payload.keys()) if event.payload else [],
             }
         )
-        
+
         raise ValueError(f"No processor registered for event type: {event.name}")
-    
+
     def get_retry_config(self) -> RetryConfig:
         # No retries for missing processor
         return RetryConfig(
@@ -177,7 +182,7 @@ class NoOpProcessor(IEventProcessor):
             fast_retry_count=0,
             fast_retry_delay=0.0,
         )
-    
+
     def classify_error(self, exc: Exception) -> ErrorType:
         # Always permanent - no processor found
         return ErrorType.PERMANENT
@@ -190,21 +195,22 @@ class ProcessorRegistry:
     def __init__(self):
         self._processors: Dict[str, IEventProcessor] = {}
         self._noop_processor = NoOpProcessor()  # Default fallback
-    
+
     def get(self, event_name: str) -> IEventProcessor:
         """Get processor, default to NoOpProcessor if not found"""
         processor = self._processors.get(event_name)
-        
+
         if processor is None:
             logger.warning(
                 f"Processor not found for event type: {event_name}, using NoOpProcessor"
             )
             return self._noop_processor
-        
+
         return processor
 ```
 
 **Benefits**:
+
 - ✅ Detecta automáticamente nuevos event types
 - ✅ Log estructurado para monitoreo
 - ✅ No rompe pipeline (FAILED gracefully)
@@ -320,11 +326,11 @@ class IEventProcessor(ABC):
     @abstractmethod
     async def process(self, event: Event) -> ProcessorResult:
         pass
-    
+
     @abstractmethod
     def get_retry_config(self) -> RetryConfig:
         pass
-    
+
     def classify_error(self, exc: Exception) -> ErrorType:
         # Default implementation
         from pydantic import ValidationError
@@ -347,7 +353,7 @@ from uuid import UUID
 class TaskCallbackPayload(BaseModel):
     """
     Unified callback structure for all long-running processors.
-    
+
     Published to: "event-result-{event_id}" (dynamic, per event)
     """
     event_id: UUID
@@ -355,7 +361,7 @@ class TaskCallbackPayload(BaseModel):
     result: dict[str, Any] | None = None
     error: str | None = None
     metadata: dict[str, Any] | None = None  # Processor-specific data
-    
+
     # Auto-trim extra fields for flexible extensibility
     class Config:
         extra = "allow"
@@ -388,40 +394,40 @@ from app.core.processors import IEventProcessor, ProcessorResult, RetryConfig
 class LongRunningTaskProcessor(IEventProcessor):
     """
     Base class for long-running processors.
-    
+
     Subclasses define:
     - task_subject: Topic where task is published
     - Example: ScrapingProcessor → "scraping-task-subject"
     """
-    
+
     def __init__(self, broker: RedisBroker, task_subject: str):
         self.broker = broker
         self.task_subject = task_subject
-    
+
     async def process(self, event: Event) -> ProcessorResult:
         """
         Publish task and return PENDING_CALLBACK.
-        
+
         Flow:
         1. Validate task params
         2. Publish to task_subject (e.g., "scraping-task-subject")
         3. Return PENDING_CALLBACK with callback_subject="event-result-{event_id}"
         """
-        
+
         callback_subject = f"event-result-{event.id}"
-        
+
         # Publish task (format depends on processor)
         task_payload = {
             "event_id": str(event.id),
             "task_params": event.payload,
             "callback_subject": callback_subject,
         }
-        
+
         await self.broker.publish(
             task_payload,
             stream=self.task_subject,
         )
-        
+
         return ProcessorResult(
             status=ProcessorResultStatus.PENDING_CALLBACK,
             callback_subject=callback_subject,
@@ -430,7 +436,7 @@ class LongRunningTaskProcessor(IEventProcessor):
                 "published_at": datetime.now(timezone.utc).isoformat(),
             },
         )
-    
+
     def get_retry_config(self) -> RetryConfig:
         # No retries for long-running tasks
         return RetryConfig(
@@ -469,7 +475,7 @@ class NoOpProcessor(IEventProcessor):
     Default processor for unregistered event types.
     Detects and monitors new event types without explicit handler.
     """
-    
+
     async def process(self, event: Event) -> ProcessorResult:
         logger.warning(
             f"NoOpProcessor: Event without registered processor",
@@ -479,12 +485,12 @@ class NoOpProcessor(IEventProcessor):
                 "payload_keys": list(event.payload.keys()) if event.payload else [],
             }
         )
-        
+
         raise ValueError(
             f"No processor registered for event type: {event.name}. "
             "Add to ProcessorRegistry or update catalog configuration."
         )
-    
+
     def get_retry_config(self) -> RetryConfig:
         # No retries - permanent error
         return RetryConfig(
@@ -495,7 +501,7 @@ class NoOpProcessor(IEventProcessor):
             fast_retry_count=0,
             fast_retry_delay=0.0,
         )
-    
+
     def classify_error(self, exc: Exception) -> ErrorType:
         # Always permanent - no processor found is not retryable
         return ErrorType.PERMANENT
@@ -506,23 +512,23 @@ class ProcessorRegistry:
     Registry for event processors.
     Uses NoOpProcessor as fallback for unregistered event types.
     """
-    
+
     def __init__(self):
         self._processors: Dict[str, IEventProcessor] = {}
         self._noop = NoOpProcessor()
-    
+
     def register(self, event_name: str, processor: IEventProcessor):
         """Register processor for event type"""
         logger.info(f"Registered processor for event type: {event_name}")
         self._processors[event_name] = processor
-    
+
     def get(self, event_name: str) -> IEventProcessor:
         """
         Get processor for event type.
         Returns NoOpProcessor if not found (detects new event types).
         """
         processor = self._processors.get(event_name)
-        
+
         if processor is None:
             logger.warning(
                 f"Processor not found for event type: {event_name}, "
@@ -530,9 +536,9 @@ class ProcessorRegistry:
                 extra={"event_name": event_name}
             )
             return self._noop
-        
+
         return processor
-    
+
     def has(self, event_name: str) -> bool:
         """Check if explicit processor registered (excludes NoOp)"""
         return event_name in self._processors
@@ -548,11 +554,11 @@ def setup_processors(broker: RedisBroker, uow: IUnitOfWork):
     processor_registry.register("api_call", ApiCallProcessor())
     processor_registry.register("grpc_call", GrpcProcessor())
     processor_registry.register("local_usecase", LocalUseCaseProcessor(uow))
-    
+
     # Async long-running processors
     processor_registry.register("scraping_task", ScrapingProcessor(broker))
     processor_registry.register("ml_inference", MlInferenceProcessor(broker))
-    
+
     # NoOpProcessor is implicit fallback (no registration needed)
     logger.info("Processor registry initialized")
 ```
@@ -572,16 +578,16 @@ async def handle_task_callback(
 ) -> None:
     """
     Unified callback handler for all long-running processors.
-    
+
     Listens on: "event-result-{event_id}" (dynamic topics)
     Payload: TaskCallbackPayload (validated by Pydantic)
-    
+
     Updates event state based on callback status.
     """
     try:
         event_id = body.event_id
         status = body.status
-        
+
         logger.info(
             f"Task callback received for event {event_id}: {status}",
             extra={
@@ -590,7 +596,7 @@ async def handle_task_callback(
                 "has_error": body.error is not None,
             }
         )
-        
+
         async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
             # Load event
             event_result = await uow.events.get_by_id(event_id)
@@ -598,9 +604,9 @@ async def handle_task_callback(
                 logger.error(f"Event {event_id} not found for callback")
                 await msg.nack()
                 return
-            
+
             event = event_result.unwrap()
-            
+
             # Verify state (must be PROCESSING with callback metadata)
             if event.state != EventState.PROCESSING:
                 logger.warning(
@@ -609,13 +615,13 @@ async def handle_task_callback(
                 )
                 await msg.ack()  # Don't reprocess
                 return
-            
+
             # Update based on callback status
             if status == "success":
                 # Success: Transition PROCESSING → COMPLETED
                 event.state = EventState.COMPLETED
                 event.result = body.result
-                
+
                 # Update processing metadata
                 if "processing" not in event.context:
                     event.context["processing"] = {}
@@ -625,7 +631,7 @@ async def handle_task_callback(
                         event.context["processing"]["started_at"]
                     )).total_seconds() * 1000
                 )
-                
+
                 # Record callback reception
                 if "callback" not in event.context:
                     event.context["callback"] = {}
@@ -633,7 +639,7 @@ async def handle_task_callback(
                 event.context["callback"]["status"] = "success"
                 if body.metadata:
                     event.context["callback"]["metadata"] = body.metadata
-                
+
                 # Add transition
                 transition = EventTransition(
                     from_state=EventState.PROCESSING,
@@ -641,20 +647,20 @@ async def handle_task_callback(
                     event_id=event.id,
                 )
                 event.transitions.append(transition)
-                
+
                 logger.info(f"Event {event_id} completed via callback")
-                
+
             else:
                 # Failed: Transition PROCESSING → FAILED (no retry for task failures)
                 event.state = EventState.FAILED
-                
+
                 # Record error
                 if "error" not in event.context:
                     event.context["error"] = {}
                 event.context["error"]["type"] = "task_failed"
                 event.context["error"]["message"] = body.error or "Task failed"
                 event.context["error"]["occurred_at"] = datetime.now(timezone.utc).isoformat()
-                
+
                 # Record callback reception
                 if "callback" not in event.context:
                     event.context["callback"] = {}
@@ -662,7 +668,7 @@ async def handle_task_callback(
                 event.context["callback"]["status"] = "failed"
                 if body.metadata:
                     event.context["callback"]["metadata"] = body.metadata
-                
+
                 # Add transition
                 transition = EventTransition(
                     from_state=EventState.PROCESSING,
@@ -670,12 +676,12 @@ async def handle_task_callback(
                     event_id=event.id,
                 )
                 event.transitions.append(transition)
-                
+
                 logger.error(
                     f"Event {event_id} failed via callback: {body.error}",
                     extra={"event_id": str(event_id), "error": body.error}
                 )
-            
+
             # Save event
             save_result = await uow.events.save(event)
             if save_result.is_err():
@@ -685,10 +691,10 @@ async def handle_task_callback(
                 )
                 await msg.nack()
                 return
-            
+
             # Success: ack message
             await msg.ack()
-            
+
     except Exception as e:
         logger.error(
             f"Unexpected error in task callback handler: {e}",
@@ -717,6 +723,7 @@ class EventCallbackContext(TypedDict):
 ```
 
 **Ejemplo SYNC (ApiCall)**:
+
 ```json
 {
   "processing": {
@@ -730,6 +737,7 @@ class EventCallbackContext(TypedDict):
 ```
 
 **Ejemplo ASYNC (Scraping)**:
+
 ```json
 {
   "processing": {
@@ -756,27 +764,28 @@ class EventCallbackContext(TypedDict):
 
 ## ✅ Cambios Resumidos vs Original
 
-| Aspecto | Original | Reformulado | Beneficio |
-|---------|----------|-------------|----------|
-| **Event States** | PROCESSING + WAITING_CALLBACK | Solo PROCESSING (+ metadata) | Simplificación, menos estados |
-| **Topics** | Wildcard subscribers | Dynamic "event-result-{event_id}" | Mejor performance, menos overhead |
-| **Callback Payload** | TypedDict | Pydantic BaseModel | Validación automática, type-safe |
-| **NoProcessor** | ❌ Falla silenciosa | ✅ NoOpProcessor + logging | Detección automática de nuevos eventos |
-| **Task Topics** | "scraping-result-*" | "scraping-task-subject" (configurable) | Flexibilidad, clara separación |
+| Aspecto              | Original                      | Reformulado                            | Beneficio                              |
+| -------------------- | ----------------------------- | -------------------------------------- | -------------------------------------- |
+| **Event States**     | PROCESSING + WAITING_CALLBACK | Solo PROCESSING (+ metadata)           | Simplificación, menos estados          |
+| **Topics**           | Wildcard subscribers          | Dynamic "event-result-{event_id}"      | Mejor performance, menos overhead      |
+| **Callback Payload** | TypedDict                     | Pydantic BaseModel                     | Validación automática, type-safe       |
+| **NoProcessor**      | ❌ Falla silenciosa           | ✅ NoOpProcessor + logging             | Detección automática de nuevos eventos |
+| **Task Topics**      | "scraping-result-\*"          | "scraping-task-subject" (configurable) | Flexibilidad, clara separación         |
 
 ---
 
 ## 🧪 Testing Strategy
 
 **New tests for NoOpProcessor**:
+
 ```python
 async def test_noop_processor_detects_unregistered_event(uow_mock):
     event = Event(name="unknown_event_type", ...)
     processor = processor_registry.get("unknown_event_type")
-    
+
     # Should return NoOpProcessor
     assert isinstance(processor, NoOpProcessor)
-    
+
     # Should fail with permanent error
     with pytest.raises(ValueError):
         await processor.process(event)
@@ -848,4 +857,4 @@ async def test_callback_handler_with_pydantic_validation(msg):
 ✅ Sin WAITING_CALLBACK (metadata en context)  
 ✅ Topics dinámicos unificados (event-result-{event_id})  
 ✅ Pydantic BaseModel para callbacks  
-✅ NoOpProcessor para detectar eventos no catalogados  
+✅ NoOpProcessor para detectar eventos no catalogados

@@ -198,7 +198,7 @@ class TestLongRunningTaskProcessor:
             external_uuid=uuid4(),
         )
 
-        result = await processor.process(event)
+        await processor.process(event)
 
         # Verify task published
         broker_mock.publish.assert_called_once()

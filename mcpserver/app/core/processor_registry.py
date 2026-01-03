@@ -165,25 +165,28 @@ def setup_processors(broker: Any = None, uow: Any = None) -> None:
         broker: FastStream RedisBroker instance (for long-running processors)
         uow: IUnitOfWork instance (for local use case processors)
     """
-    # TODO: Implement concrete processors
-    # from app.infrastructure.processors.sync_processors import (
-    #     ApiCallProcessor,
-    #     GrpcProcessor,
-    #     LocalUseCaseProcessor,
-    # )
-    # from app.infrastructure.processors.long_running_processor import (
-    #     ScrapingProcessor,
-    #     MlInferenceProcessor,
-    # )
+    from app.infrastructure.processors.long_running_processor import (
+        BatchExportProcessor,
+        MlInferenceProcessor,
+        ScrapingProcessor,
+    )
+    from app.infrastructure.processors.sync_processors import (
+        ApiCallProcessor,
+        GrpcProcessor,
+        LocalUseCaseProcessor,
+    )
 
-    # Sync processors (will be registered here)
-    # processor_registry.register("api_call", ApiCallProcessor())
-    # processor_registry.register("grpc_call", GrpcProcessor())
-    # processor_registry.register("local_usecase", LocalUseCaseProcessor(uow))
+    # Sync processors - request/response operations
+    processor_registry.register("api_call", ApiCallProcessor())
+    processor_registry.register("grpc_call", GrpcProcessor())
+    if uow is not None:
+        processor_registry.register("local_usecase", LocalUseCaseProcessor(uow))
 
-    # Async long-running processors
-    # processor_registry.register("scraping_task", ScrapingProcessor(broker))
-    # processor_registry.register("ml_inference", MlInferenceProcessor(broker))
+    # Async long-running processors - require broker for task publishing
+    if broker is not None:
+        processor_registry.register("scraping_task", ScrapingProcessor(broker))
+        processor_registry.register("ml_inference", MlInferenceProcessor(broker))
+        processor_registry.register("batch_export", BatchExportProcessor(broker))
 
     logger.info(
         f"Processor registry initialized with {len(processor_registry.list_registered())} "
