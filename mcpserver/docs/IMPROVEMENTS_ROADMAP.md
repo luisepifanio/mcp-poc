@@ -8,16 +8,16 @@ Priority Matrix:
 
 Impact
   ▲
-  │     
+  │
   │  🔥 P0: Mejora #1   🔥 P0: Mejora #2
   │  ✅ DONE            ⏳ IN PROGRESS
-  │  
+  │
   │  🎯 P1: Mejora #3   🛡️ P1: Mejora #5
   │  ⏳ TODO            ⏳ TODO
-  │  
+  │
   │  📊 P2: Mejora #4
   │  ⏳ TODO
-  │  
+  │
   └─────────────────────────────────────────► Complejidad
       Baja      Media      Alta
 ```
@@ -29,9 +29,10 @@ Impact
 **Estado**: ✅ DONE (commit `4bdb38d`)  
 **Prioridad**: 🔥 P0 - Crítico  
 **Impacto**: Alto - Previene resource leaks  
-**Complejidad**: Baja  
+**Complejidad**: Baja
 
 ### Qué se hizo
+
 - ✅ Implementar `owns_session` en `AsyncSQLAlchemyUnitOfWork`
 - ✅ Agregar verificación de estado con `_is_session_active()`
 - ✅ Actualizar redis handler a `owns_session=False`
@@ -39,12 +40,14 @@ Impact
 - ✅ Try/finally block para transacciones atomistas
 
 ### Beneficios
+
 - 🛡️ Elimina double-close errors
 - 🛡️ Claro quién posee la sesión
 - 🛡️ Fácil de testear y mockear
 - 🛡️ Graceful degradation
 
 ### Archivos Afectados
+
 - `app/infrastructure/db/unit_of_work.py`
 - `app/infrastructure/redis/main.py`
 - `tests/unit/test_unit_of_work_unit.py`
@@ -56,9 +59,10 @@ Impact
 **Estado**: ⏳ TODO - Listo para implementar  
 **Prioridad**: 🔥 P0 - Crítico  
 **Impacto**: Alto - Desbloquea flujo evento → procesamiento → resultado  
-**Complejidad**: Baja  
+**Complejidad**: Baja
 
 ### Qué hacer
+
 1. Después de enqueue exitoso → publicar a `processing-event-subject`
 2. Incluir metadatos: `event_id`, `name`, `state`
 3. Manejar errores permanentes (validation) vs transitorios
@@ -66,11 +70,12 @@ Impact
 ### Cambios Necesarios
 
 **En** `handle_enqueue_event`:
+
 ```python
 match result:
     case Ok(value):
         logger.info(f"Evento encolado: {value.id}")
-        
+
         # ✅ NUEVO: Publicar al siguiente subject
         await broker.publish(
             {
@@ -80,7 +85,7 @@ match result:
             },
             stream="processing-event-subject"
         )
-        
+
         await msg.ack()
     case Err(error):
         if error.error == ErrorCatalog.VALIDATION_FAILED.value:
@@ -90,6 +95,7 @@ match result:
 ```
 
 ### Tests Necesarios
+
 ```python
 # tests/functional/test_redis_enqueue_handler.py
 
@@ -104,6 +110,7 @@ match result:
 ```
 
 ### Archivos a Modificar
+
 - `app/infrastructure/redis/main.py` (handle_enqueue_event)
 - `tests/functional/test_redis_enqueue_handler.py` (new)
 
@@ -114,15 +121,17 @@ match result:
 **Estado**: ⏳ TODO - Diseño listo  
 **Prioridad**: 🎯 P1 - Importante  
 **Impacto**: Medio - Abstracción limpia  
-**Complejidad**: Media  
+**Complejidad**: Media
 
 ### Qué hacer
+
 - Extraer lógica de publicación a interface `MessagePublisher`
 - Crear adaptador `RedisMessagePublisher`
 - Inyectar en handler vía `Depends(get_publisher)`
 - Facilita swap de implementaciones (Redis → RabbitMQ, etc)
 
 ### Archivos a Crear/Modificar
+
 ```
 app/
 ├── core/gateways/
@@ -136,6 +145,7 @@ tests/
 ```
 
 ### Estructura
+
 ```python
 # app/core/gateways/message_publisher.py
 class MessagePublisher(Protocol):
@@ -163,9 +173,10 @@ class RedisMessagePublisher(MessagePublisher):
 **Estado**: ⏳ TODO - Diseño listo  
 **Prioridad**: 🛡️ P1 - Importante  
 **Impacto**: Alto - Robustez de producción  
-**Complejidad**: Media  
+**Complejidad**: Media
 
 ### Qué hacer
+
 1. Implementar max retries (ej: 3)
 2. Crear dead-letter-queue para mensajes fallidos
 3. Distinguir errores permanentes vs transitorios
@@ -180,12 +191,12 @@ DLQ_SUBJECT = "dead-letter-queue"
 @EnqueueEventSubscriber
 async def handle_enqueue_event(...):
     retry_count = msg.headers.get("retry_count", 0)
-    
+
     match result:
         case Ok(value):
             # ✅ Success
             await msg.ack()
-            
+
         case Err(error):
             if error.error == ErrorCatalog.VALIDATION_FAILED.value:
                 # ✅ Permanent error → DLQ + ack
@@ -194,7 +205,7 @@ async def handle_enqueue_event(...):
                     stream=DLQ_SUBJECT
                 )
                 await msg.ack()
-                
+
             elif retry_count >= MAX_RETRIES:
                 # ✅ Too many retries → DLQ + ack
                 await broker.publish(
@@ -202,13 +213,14 @@ async def handle_enqueue_event(...):
                     stream=DLQ_SUBJECT
                 )
                 await msg.ack()
-                
+
             else:
                 # ✅ Transient error → nack (reintentar)
                 await msg.nack()
 ```
 
 ### Tests Necesarios
+
 ```python
 ✅ test_enqueue_handler_max_retries_sends_to_dlq
    - 3 intentos fallidos → DLQ + ack
@@ -218,6 +230,7 @@ async def handle_enqueue_event(...):
 ```
 
 ### Archivos a Crear/Modificar
+
 - `app/infrastructure/redis/main.py` (MODIFY)
 - `tests/functional/test_redis_enqueue_handler.py` (ADD tests)
 
@@ -228,9 +241,10 @@ async def handle_enqueue_event(...):
 **Estado**: ⏳ TODO - Opcional  
 **Prioridad**: 📊 P2 - Nice to have  
 **Impacto**: Medio - Observabilidad  
-**Complejidad**: Baja  
+**Complejidad**: Baja
 
 ### Qué hacer
+
 - Usar `structlog` para logging estructurado
 - Agregar correlation ID para trazabilidad
 - Contexto: event_name, event_id, external_uuid, retry_count
@@ -250,13 +264,14 @@ async def handle_enqueue_event(...):
         external_uuid=str(event.external_uuid),
         correlation_id=msg.message_id if hasattr(msg, 'message_id') else None
     )
-    
+
     log.info("event_received")
     # ...
     log.info("event_enqueued_success", state=value.state.value)
 ```
 
 ### Beneficios
+
 - 🔍 Trazabilidad end-to-end
 - 📊 Análisis de logs con ELK/CloudWatch
 - 🔗 Correlación de eventos
@@ -286,13 +301,13 @@ Week 3+:
 
 ## 🎯 Métricas de Éxito
 
-| Mejora | Coverage | Tests | Quality |
-|--------|----------|-------|---------|
-| #1 | 92.16% ✅ | 99 ✅ | ruff+mypy ✅ |
-| #2 | 93%+ 🎯 | 103+ 🎯 | ruff+mypy 🎯 |
-| #3 | 94%+ 🎯 | 108+ 🎯 | ruff+mypy 🎯 |
-| #4 | 94%+ 🎯 | 108+ 🎯 | ruff+mypy 🎯 |
-| #5 | 95%+ 🎯 | 113+ 🎯 | ruff+mypy 🎯 |
+| Mejora | Coverage  | Tests   | Quality      |
+| ------ | --------- | ------- | ------------ |
+| #1     | 92.16% ✅ | 99 ✅   | ruff+mypy ✅ |
+| #2     | 93%+ 🎯   | 103+ 🎯 | ruff+mypy 🎯 |
+| #3     | 94%+ 🎯   | 108+ 🎯 | ruff+mypy 🎯 |
+| #4     | 94%+ 🎯   | 108+ 🎯 | ruff+mypy 🎯 |
+| #5     | 95%+ 🎯   | 113+ 🎯 | ruff+mypy 🎯 |
 
 ---
 

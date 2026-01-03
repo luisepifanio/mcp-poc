@@ -22,8 +22,8 @@ class AsyncSQLAlchemyUnitOfWork(UnitOfWork):
             owns_session: If True, UoW is responsible for closing the session.
                          If False (default), session is managed externally (e.g., by FastAPI Depends).
         """
-        self._session = session
-        self._owns_session = owns_session
+        self._session: AsyncSession = session
+        self._owns_session: bool = owns_session
         self._courses: CourseRepository | None = None
         self._events: EventRepository | None = None
 

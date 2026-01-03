@@ -49,7 +49,7 @@ class AsyncSQLAlchemyUnitOfWork(UnitOfWork):
         """
         Args:
             session: AsyncSession instance.
-            owns_session: If True, UoW closes session; if False (default), 
+            owns_session: If True, UoW closes session; if False (default),
                          session managed externally.
         """
         self._session = session
@@ -59,11 +59,11 @@ class AsyncSQLAlchemyUnitOfWork(UnitOfWork):
 
 ### Comportamiento
 
-| Escenario | owns_session | Close en __aexit__? | Responsable |
-|-----------|--------------|-------------------|------------|
-| **FastAPI Depends** | `False` | ❌ NO | FastAPI Depends |
-| **Direct instantiation** | `True` | ✅ YES | UoW |
-| **Tests with mock** | `False` | ❌ NO | Test fixture |
+| Escenario                | owns_session | Close en **aexit**? | Responsable     |
+| ------------------------ | ------------ | ------------------- | --------------- |
+| **FastAPI Depends**      | `False`      | ❌ NO               | FastAPI Depends |
+| **Direct instantiation** | `True`       | ✅ YES              | UoW             |
+| **Tests with mock**      | `False`      | ❌ NO               | Test fixture    |
 
 ---
 
@@ -94,7 +94,7 @@ def _is_session_active(self) -> bool:
 
 ## 📝 Implementación Detallada
 
-### En UnitOfWork.__aexit__
+### En UnitOfWork.**aexit**
 
 ```python
 async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -112,7 +112,7 @@ async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
                 await self._session.close()
             except Exception as e:
                 logger.warning(f"Error closing session: {e}")
-        
+
         # 3. Cleanup
         self._courses = None
         self._events = None
@@ -194,13 +194,13 @@ async def test_unit_of_work_rollback_on_exception():
 
 ## 📊 Impacto
 
-| Métrica | Antes | Después | Mejora |
-|---------|-------|---------|--------|
-| **Resource leaks** | ⚠️ Posibles | ✅ Imposibles | 100% |
-| **Double-close errors** | ⚠️ Posibles | ✅ Imposibles | 100% |
-| **Session state clarity** | ⚠️ Implícita | ✅ Explícita | N/A |
-| **Testability** | ⚠️ Difícil | ✅ Fácil | N/A |
-| **Code coverage** | 92% | 92.16% | +0.16% |
+| Métrica                   | Antes        | Después       | Mejora |
+| ------------------------- | ------------ | ------------- | ------ |
+| **Resource leaks**        | ⚠️ Posibles  | ✅ Imposibles | 100%   |
+| **Double-close errors**   | ⚠️ Posibles  | ✅ Imposibles | 100%   |
+| **Session state clarity** | ⚠️ Implícita | ✅ Explícita  | N/A    |
+| **Testability**           | ⚠️ Difícil   | ✅ Fácil      | N/A    |
+| **Code coverage**         | 92%          | 92.16%        | +0.16% |
 
 ---
 
@@ -249,7 +249,7 @@ async def test_something(uow_factory):
 **Commit hash**: `4bdb38d`  
 **Tests**: 99 passed, 92.16% coverage ✅  
 **Ruff**: All checks passed ✅  
-**mypy**: Success ✅  
+**mypy**: Success ✅
 
 ---
 
