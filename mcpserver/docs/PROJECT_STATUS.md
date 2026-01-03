@@ -2,13 +2,14 @@
 
 **Fecha**: 3 de Enero de 2026  
 **Status**: ✅ **ARQUITECTURA APROBADA - LISTO PARA IMPLEMENTACIÓN**  
-**Decisión**: Alternativa A - Handler-Managed Transaction Orchestration  
+**Decisión**: Alternativa A - Handler-Managed Transaction Orchestration
 
 ---
 
 ## 🎯 Lo Que Hemos Logrado
 
 ### ✅ Mejora #1: Session Ownership Pattern (COMPLETADA)
+
 - **Commit**: `4bdb38d`
 - **Qué hace**: AsyncSQLAlchemyUnitOfWork ahora maneja propiedad de sesión
 - **Impacto**: Previene double-close errors, gestión clara de ciclo de vida
@@ -16,6 +17,7 @@
 - **Quality**: ruff + mypy ✅
 
 ### ✅ Análisis Arquitectónico Completo (COMPLETADO)
+
 - **4 Alternativas evaluadas** (A, B, C, D)
 - **Alternativa A aprobada** (Handler-managed transactions)
 - **3 documentos técnicos** generados:
@@ -73,13 +75,13 @@
 
 ### Beneficios Clave
 
-| Aspecto | Beneficio |
-|---------|-----------|
-| **Atomicidad** | `save(evento)` + `publish(processing)` = 1 transacción |
-| **Composición** | 2+ use cases en 1 transacción coordinada |
-| **Testabilidad** | UseCase tests sin contexto transaccional |
-| **Arquitectura** | Clean: Handler orquesta, UseCase ejecuta |
-| **SOLID** | SRP, OCP, DIP claramente separados |
+| Aspecto          | Beneficio                                              |
+| ---------------- | ------------------------------------------------------ |
+| **Atomicidad**   | `save(evento)` + `publish(processing)` = 1 transacción |
+| **Composición**  | 2+ use cases en 1 transacción coordinada               |
+| **Testabilidad** | UseCase tests sin contexto transaccional               |
+| **Arquitectura** | Clean: Handler orquesta, UseCase ejecuta               |
+| **SOLID**        | SRP, OCP, DIP claramente separados                     |
 
 ---
 
@@ -96,6 +98,7 @@ fcc50b0 refactor(infra): RouterRegistry + BaseRouter ✅
 ```
 
 ### Tests Actuales
+
 - ✅ 99 tests passing
 - ✅ 2 skipped
 - ✅ 92.16% coverage (umbral: ≥85%)
@@ -103,6 +106,7 @@ fcc50b0 refactor(infra): RouterRegistry + BaseRouter ✅
 - ✅ mypy strict: no issues
 
 ### Archivos Documentación
+
 ```
 docs/
 ├── ADR_TRANSACTION_ORCHESTRATION.md    ← Formal decision
@@ -121,12 +125,14 @@ docs/
 ### Fase 1: Refactorizar Core UseCases (1 día)
 
 **Archivos a modificar**:
+
 - `app/core/usecases/event_usecases.py`
   - Remove: `async with self.uow:` en `EnqueueEventUseCase.execute()`
   - Keep: Toda la lógica de negocio
   - Add: Docstring que explique que caller maneja transacción
 
 **Cambio Específico**:
+
 ```python
 # ANTES (línea ~138)
 async def execute(self, input: EnqueuedEventUseCaseInput) -> Result[...]:
@@ -145,10 +151,12 @@ async def execute(self, input: EnqueuedEventUseCaseInput) -> Result[...]:
 ### Fase 2: Actualizar Infrastructure Handlers (1 día)
 
 **Archivo a modificar**:
+
 - `app/infrastructure/redis/main.py`
   - `handle_enqueue_event()`: Add `async with UoW`
 
 **Cambio Específico**:
+
 ```python
 # ANTES
 async def handle_enqueue_event(..., session: AsyncSession = Depends(get_session)) -> None:
@@ -161,7 +169,7 @@ async def handle_enqueue_event(..., session: AsyncSession = Depends(get_session)
     async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:  # ✅ Context manager
         usecase = EnqueueEventUseCase(uow)
         result = await usecase.execute(event)
-        
+
         if result.is_ok():
             # ✅ Publish dentro transacción (MEJORA #2)
             await broker.publish(
@@ -173,10 +181,12 @@ async def handle_enqueue_event(..., session: AsyncSession = Depends(get_session)
 ### Fase 3: Migrar Tests (2 días)
 
 **Unit Tests** (`tests/unit/test_enqueue_event_usecase_unit.py`):
+
 - Remove: Expectativas de context manager
 - Tests ya no necesitan simulación de transacción
 
 **Functional Tests** (`tests/functional/test_enqueue_event_usecase_functional.py`):
+
 - Add: `async with uow_factory() as uow:` en fixtures
 - Verify: Atomicidad con nuevo patrón
 
@@ -203,10 +213,10 @@ async def handle_enqueue_event(...):
         # Step 1: Enqueue
         usecase = EnqueueEventUseCase(uow)
         result = await usecase.execute(event)
-        
+
         if result.is_ok():
             event_saved = result.unwrap()
-            
+
             # Step 2: Publish (DENTRO MISMA TRANSACCIÓN)
             await broker.publish(
                 {
@@ -216,7 +226,7 @@ async def handle_enqueue_event(...):
                 },
                 stream="processing-event-subject"
             )
-            
+
             # Step 3: Acknowledge
             await msg.ack()
             # COMMIT automático en __aexit__ (ATÓMICO)
@@ -225,6 +235,7 @@ async def handle_enqueue_event(...):
 ```
 
 ### Garantías
+
 - ✅ Si publish falla → todo rollback
 - ✅ Si handler crash después ack → no hay duplication
 - ✅ Event guardado + published = 1 unidad atómica
@@ -274,6 +285,7 @@ Verificaré que todo esté listo:
 ## 🎬 ¿Procede mos Con Las Fases de Implementación?
 
 ### Opción A: Implementar todas las fases ahora (5 días)
+
 - Refactor UseCase
 - Update Handler
 - Migrate Tests
@@ -281,6 +293,7 @@ Verificaré que todo esté listo:
 - **Resultado**: Listo para Mejora #2 + Composición
 
 ### Opción B: Implementar paso a paso (recomendado)
+
 - **Hoy**: Fase 1 (refactor UseCase)
 - **Mañana**: Fase 2 (update handlers)
 - **Día 3**: Fase 3 (migrate tests)
@@ -291,22 +304,23 @@ Verificaré que todo esté listo:
 
 ## 📝 Resumen de Decisión
 
-| Aspecto | Decisión |
-|---------|----------|
-| **Patrón** | Alternativa A: Handler-managed transactions |
-| **UseCase** | Sin `async with self.uow` (Pure logic) |
-| **Handler** | Con `async with UoW` (Orchestration) |
-| **Atomicidad** | Garantizada: save + publish en 1 TX |
-| **Composición** | Soportada: múltiples use cases |
-| **Testing** | Mejorado: unit tests sin TX context |
-| **Esfuerzo** | 5 días (4 fases) |
-| **Siguiente** | Mejora #2 (Publish to processing) |
+| Aspecto         | Decisión                                    |
+| --------------- | ------------------------------------------- |
+| **Patrón**      | Alternativa A: Handler-managed transactions |
+| **UseCase**     | Sin `async with self.uow` (Pure logic)      |
+| **Handler**     | Con `async with UoW` (Orchestration)        |
+| **Atomicidad**  | Garantizada: save + publish en 1 TX         |
+| **Composición** | Soportada: múltiples use cases              |
+| **Testing**     | Mejorado: unit tests sin TX context         |
+| **Esfuerzo**    | 5 días (4 fases)                            |
+| **Siguiente**   | Mejora #2 (Publish to processing)           |
 
 ---
 
 ## 🔗 Documentación de Referencia
 
 Para implementación:
+
 - [ADR_TRANSACTION_ORCHESTRATION.md](docs/ADR_TRANSACTION_ORCHESTRATION.md) - Plan detallado
 - [DECISION_SUMMARY.md](docs/DECISION_SUMMARY.md) - Justificación
 - [Agents.md](../Agents.md) - Development workflow

@@ -135,30 +135,33 @@ class EnqueueEventUseCase(
                 )
             )
 
-        async with self.uow:
-            # Normalize JSON fields to deterministic representation
-            normalized_payload = self._normalize_json(input.payload)
-            normalized_context = self._normalize_json(input.context)
+        # NOTE: Caller (infrastructure handler) manages transaction context.
+        # This UseCase assumes an active transaction via UnitOfWork.
+        # See: docs/TRANSACTION_PATTERN.md
 
-            # Auto-generate UUID if not provided (analogous to database autoincrement)
-            # This respects the Pydantic default_factory=uuid4 in EnqueuedEventUseCaseInput
-            event_id = input.id if input.id is not None else uuid4()
+        # Normalize JSON fields to deterministic representation
+        normalized_payload = self._normalize_json(input.payload)
+        normalized_context = self._normalize_json(input.context)
 
-            evt = Event(
-                id=event_id,
-                name=input.name,
-                external_uuid=input.external_uuid,
-                payload=normalized_payload or {},
-                context=normalized_context or {},
-                state=input.state or EventState.CREATED,
-            )
+        # Auto-generate UUID if not provided (analogous to database autoincrement)
+        # This respects the Pydantic default_factory=uuid4 in EnqueuedEventUseCaseInput
+        event_id = input.id if input.id is not None else uuid4()
 
-            op_result = await self.uow.events.save_or_resolve_one(evt)
+        evt = Event(
+            id=event_id,
+            name=input.name,
+            external_uuid=input.external_uuid,
+            payload=normalized_payload or {},
+            context=normalized_context or {},
+            state=input.state or EventState.CREATED,
+        )
 
-            # TODO: Implement transition to PENDING state just after publishing successfully
-            # to redis stream, so for now we keep it as CREATED
+        op_result = await self.uow.events.save_or_resolve_one(evt)
 
-            return op_result.and_then(lambda saved_event: Ok(self.as_output(saved_event)))
+        # TODO: Implement transition to PENDING state just after publishing successfully
+        # to redis stream, so for now we keep it as CREATED
+
+        return op_result.and_then(lambda saved_event: Ok(self.as_output(saved_event)))
 
     def as_event_entity(self, input: EnqueuedEventUseCaseInput) -> Event:
         return Event(

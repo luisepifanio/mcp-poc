@@ -46,19 +46,20 @@ Handler (redis/main.py)
 ### **ALTERNATIVA A: UseCase SIN Context Manager** (Recommended)
 
 #### Patrón
+
 ```python
 # Core layer
 class EnqueueEventUseCase(AsyncUseCase[...]):
     def __init__(self, uow: UnitOfWork):
         self.uow = uow
-    
+
     async def execute(self, input: EnqueuedEventUseCaseInput) -> Result[...]:
         # ❌ NO: async with self.uow
         # ✅ SÍ: Solo usa repositorios, delegando transacción al caller
-        
+
         # Normalizar datos
         normalized_payload = self._normalize_json(input.payload)
-        
+
         # Crear entidad
         evt = Event(
             id=input.id if input.id is not None else uuid4(),
@@ -67,13 +68,14 @@ class EnqueueEventUseCase(AsyncUseCase[...]):
             context=input.context or {},
             state=input.state or EventState.CREATED,
         )
-        
+
         # ✅ Guardar sin abrir transacción (la abre el caller)
         op_result = await self.uow.events.save_or_resolve_one(evt)
         return op_result.and_then(lambda saved_event: Ok(self.as_output(saved_event)))
 ```
 
 #### En Handler
+
 ```python
 # Infrastructure layer (redis/main.py)
 @EnqueueEventSubscriber
@@ -86,13 +88,13 @@ async def handle_enqueue_event(
         # ✅ Handler ABRE transacción
         async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
             usecase = EnqueueEventUseCase(uow)
-            
+
             # 1. Enqueue en BD
             result_enqueue = await usecase.execute(event)
-            
+
             if result_enqueue.is_ok():
                 event_saved = result_enqueue.unwrap()
-                
+
                 # 2. Publicar a processing DENTRO MISMA TRANSACCIÓN
                 await broker.publish(
                     {
@@ -112,6 +114,7 @@ async def handle_enqueue_event(
 ```
 
 #### Ventajas ✅
+
 - 🎯 **Composable**: Múltiples use cases en 1 transacción
 - 🎯 **Clarito**: Handler orquesta transacción, UseCase es puro
 - 🎯 **Testeable**: Compose use cases en tests sin conflicto de contextos
@@ -119,10 +122,12 @@ async def handle_enqueue_event(
 - 🎯 **Flexible**: Handler decide dónde abrir/cerrar
 
 #### Desventajas ❌
+
 - ⚠️ UseCase asume transacción ya abierta (requiere documentación clara)
 - ⚠️ Si handler olvida abrir transacción → error en runtime
 
 #### Diagrama
+
 ```
 Handler
 └─ async with UoW:
@@ -142,12 +147,13 @@ Test
 ### **ALTERNATIVA B: UseCase Recibe Explícitamente si Maneja Transacción**
 
 #### Patrón
+
 ```python
 class EnqueueEventUseCase(AsyncUseCase[...]):
     def __init__(self, uow: UnitOfWork, manage_transaction: bool = False):
         self.uow = uow
         self.manage_transaction = manage_transaction
-    
+
     async def execute(self, input: EnqueuedEventUseCaseInput) -> Result[...]:
         # Abre transacción SOLO si manage_transaction=True
         if self.manage_transaction:
@@ -156,7 +162,7 @@ class EnqueueEventUseCase(AsyncUseCase[...]):
         else:
             # Asume transacción ya abierta
             return await self._do_execute(input)
-    
+
     async def _do_execute(self, input: EnqueuedEventUseCaseInput) -> Result[...]:
         # Lógica
         evt = Event(...)
@@ -164,6 +170,7 @@ class EnqueueEventUseCase(AsyncUseCase[...]):
 ```
 
 #### Uso
+
 ```python
 # Caso 1: UseCase abre su transacción (legacy, simple)
 usecase = EnqueueEventUseCase(uow, manage_transaction=True)
@@ -178,10 +185,12 @@ async with AsyncSQLAlchemyUnitOfWork(session) as uow:
 ```
 
 #### Ventajas ✅
+
 - ✅ Backward compatible (manage_transaction=True por defecto)
 - ✅ Permite ambos patrones gradualmente
 
 #### Desventajas ❌
+
 - ⚠️ Más complejidad en UseCase
 - ⚠️ Flag booleano no es muy explícito semánticamente
 
@@ -190,6 +199,7 @@ async with AsyncSQLAlchemyUnitOfWork(session) as uow:
 ### **ALTERNATIVA C: Transactional Decorator Pattern**
 
 #### Patrón
+
 ```python
 from functools import wraps
 
@@ -209,7 +219,7 @@ def transactional(manage_transaction: bool = False):
 class EnqueueEventUseCase(AsyncUseCase[...]):
     def __init__(self, uow: UnitOfWork):
         self.uow = uow
-    
+
     @transactional(manage_transaction=False)  # Configurar por use case
     async def execute(self, input: EnqueuedEventUseCaseInput) -> Result[...]:
         evt = Event(...)
@@ -217,10 +227,12 @@ class EnqueueEventUseCase(AsyncUseCase[...]):
 ```
 
 #### Ventajas ✅
+
 - ✅ Semánticamente explícito
 - ✅ Reutilizable en múltiples use cases
 
 #### Desventajas ❌
+
 - ⚠️ Más "magia" con decoradores
 - ⚠️ Complica el flow de código
 
@@ -229,6 +241,7 @@ class EnqueueEventUseCase(AsyncUseCase[...]):
 ### **ALTERNATIVA D: UnitOfWork Context Manager Tracking**
 
 #### Patrón
+
 ```python
 class AsyncSQLAlchemyUnitOfWork(UnitOfWork):
     def __init__(self, session: AsyncSession, owns_session: bool = False):
@@ -237,14 +250,14 @@ class AsyncSQLAlchemyUnitOfWork(UnitOfWork):
         self._context_depth = 0  # ← NUEVA: Track nesting
         self._courses: CourseRepository | None = None
         self._events: EventRepository | None = None
-    
+
     async def __aenter__(self) -> "AsyncSQLAlchemyUnitOfWork":
         self._context_depth += 1
         if self._context_depth == 1:  # Primer entrada
             self._courses = AsyncSQLAlchemyCourseRepository(self._session)
             self._events = AsyncSQLAlchemyEventRepository(self._session)
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         self._context_depth -= 1
         if self._context_depth == 0:  # Última salida
@@ -256,23 +269,26 @@ class AsyncSQLAlchemyUnitOfWork(UnitOfWork):
 ```
 
 Así permite:
+
 ```python
 async with uow:  # depth=1
     await usecase1.execute(input)  # usa uow sin context
-    
+
     async with uow:  # depth=2 (noop, reutiliza)
         await usecase2.execute(input)
     # depth vuelve a 1
-    
+
     await broker.publish(...)
 # depth=0, commit aquí
 ```
 
 #### Ventajas ✅
+
 - ✅ Permite nesting de context managers
 - ✅ Transparente para use cases
 
 #### Desventajas ❌
+
 - ⚠️ Complejidad en UoW (tracking depth)
 - ⚠️ Semántica confusa (¿qué hace nested context?)
 - ⚠️ Riesgo de rollback parcial
@@ -322,13 +338,13 @@ async def handle_enqueue_event(
         # ✅ Handler abre transacción
         async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
             usecase = EnqueueEventUseCase(uow)
-            
+
             # Enqueue
             result = await usecase.execute(event)
-            
+
             if result.is_ok():
                 value = result.unwrap()
-                
+
                 # Publish (dentro misma transacción)
                 await broker.publish(
                     {"event_id": str(value.id), "name": value.name},
@@ -350,14 +366,14 @@ async def test_enqueue_and_process_together(uow_factory):
     async with uow_factory() as uow:
         enqueue_uc = EnqueueEventUseCase(uow)
         process_uc = ProcessEventUseCase(uow)
-        
+
         # Ambos usan MISMO UoW (misma transacción)
         result1 = await enqueue_uc.execute(input1)
         assert result1.is_ok()
-        
+
         result2 = await process_uc.execute(input2)
         assert result2.is_ok()
-        
+
         # Ambos committed juntos en __aexit__
 ```
 
@@ -394,6 +410,7 @@ tests/
 ### Test Changes
 
 **Antes**: Tests esperaban context manager en UseCase
+
 ```python
 async def test_use_case(uow_mock):
     use_case = EnqueueEventUseCase(uow_mock)
@@ -401,6 +418,7 @@ async def test_use_case(uow_mock):
 ```
 
 **Después**: Mismo test, pero UseCase asume contexto ya abierto
+
 ```python
 async def test_use_case(uow_factory):
     async with uow_factory() as uow:  # ← Handler abre
@@ -413,12 +431,12 @@ async def test_use_case(uow_factory):
 
 ## 🎯 Pros & Contras Resumidos
 
-| Alternativa | Composable | Testeable | Claridad | Complejidad |
-|-------------|-----------|-----------|----------|------------|
-| **A (Recommended)** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐ |
-| B (Flag) | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ |
-| C (Decorator) | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ |
-| D (Depth tracking) | ⭐⭐⭐ | ⭐ | ⭐ | ⭐⭐⭐⭐ |
+| Alternativa         | Composable | Testeable | Claridad | Complejidad |
+| ------------------- | ---------- | --------- | -------- | ----------- |
+| **A (Recommended)** | ⭐⭐⭐     | ⭐⭐⭐    | ⭐⭐⭐   | ⭐          |
+| B (Flag)            | ⭐⭐       | ⭐⭐      | ⭐⭐     | ⭐⭐        |
+| C (Decorator)       | ⭐⭐       | ⭐⭐      | ⭐⭐     | ⭐⭐⭐      |
+| D (Depth tracking)  | ⭐⭐⭐     | ⭐        | ⭐       | ⭐⭐⭐⭐    |
 
 ---
 

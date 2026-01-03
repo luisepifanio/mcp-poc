@@ -141,19 +141,19 @@ Test: Ejecutar 2 use cases
 
 async def test_multiple_usecases():
     uow = create_uow()
-    
+
     uc1 = UseCase1(uow)
     result1 = await uc1.execute(input1)
     # UseCase1 abre: TX1
     #               ├─ save
     #               └─ COMMIT ✓
-    
+
     uc2 = UseCase2(uow)
     result2 = await uc2.execute(input2)
     # UseCase2 abre: TX2 ← NUEVA TRANSACCIÓN
     #               ├─ update
     #               └─ COMMIT ✓
-    
+
     # ❌ PROBLEMA: Transacciones separadas
     # ❌ No hay rollback coordinado
     # ❌ No puedes testar atomicidad
@@ -168,21 +168,21 @@ Test: Ejecutar 2 use cases con atomicidad
 
 async def test_multiple_usecases():
     async with uow_factory() as uow:  # ← 1 transacción
-        
+
         uc1 = UseCase1(uow)
         result1 = await uc1.execute(input1)
         # Dentro UoW:
         # ├─ save evento
         # └─ (sin commit)
-        
+
         uc2 = UseCase2(uow)
         result2 = await uc2.execute(input2)
         # Dentro MISMO UoW:
         # ├─ update estado
         # └─ (sin commit)
-        
+
         # Ambos committed juntos al salir
-        
+
         # ✅ VENTAJA: Atomicidad garantizada
         # ✅ Si uc2 falla → rollback de uc1 también
         # ✅ Transacción única coordinada
@@ -273,19 +273,23 @@ Handler              UseCase              UoW               BD
 
 ### Justificación
 
-1. **Clarity**: 
+1. **Clarity**:
+
    - Handler = Orquestación y transacción
    - UseCase = Lógica de negocio pura
 
 2. **Atomicity**:
+
    - Enqueue + Publish en 1 transacción
    - Rollback coordinado
 
 3. **Composability**:
+
    - Múltiples use cases en 1 transacción
    - Tests pueden componer con facilidad
 
 4. **Testability**:
+
    - UseCase tests no necesitan transacción
    - Handler tests comprueban orquestación
 
@@ -299,6 +303,7 @@ Handler              UseCase              UoW               BD
 ## 📋 Plan de Refactorización
 
 ### Fase 1: Cambiar EnqueueEventUseCase
+
 ```python
 # QUITAR: async with self.uow:
 # MANTENER: Lógica interna
@@ -306,6 +311,7 @@ Handler              UseCase              UoW               BD
 ```
 
 ### Fase 2: Actualizar handle_enqueue_event
+
 ```python
 # AGREGAR: async with AsyncSQLAlchemyUnitOfWork(...)
 # ORQUESTAR: UseCase + Publishing
@@ -313,6 +319,7 @@ Handler              UseCase              UoW               BD
 ```
 
 ### Fase 3: Refactorizar Tests
+
 ```python
 # Unit tests: UseCase sin transacción
 # Functional tests: Handler con transacción
@@ -320,6 +327,7 @@ Handler              UseCase              UoW               BD
 ```
 
 ### Fase 4: Extender a otros Use Cases
+
 ```python
 # ProcessEventUseCase
 # TransitionEventUseCase

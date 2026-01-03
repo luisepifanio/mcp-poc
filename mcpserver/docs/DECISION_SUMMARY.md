@@ -2,7 +2,7 @@
 
 **Date**: 2026-01-03  
 **Status**: ✅ DECISION MADE - Ready for Implementation  
-**Stakeholder Approval**: Pending peer review  
+**Stakeholder Approval**: Pending peer review
 
 ---
 
@@ -24,6 +24,7 @@ async with self.uow:  # ❌ UseCase opens context
 ```
 
 **Issues**:
+
 1. ❌ Cannot coordinate `save + publish` in one atomic transaction
 2. ❌ Cannot compose 2+ use cases (enqueue + process) together
 3. ❌ Violates Clean Architecture (UseCase manages infrastructure concern)
@@ -70,11 +71,11 @@ async def handle_enqueue_event(...):
         # 1. Enqueue
         usecase = EnqueueEventUseCase(uow)
         result = await usecase.execute(event)
-        
+
         # 2. Publish (same transaction)
         if result.is_ok():
             await broker.publish(...)  # Inside transaction!
-        
+
         # 3. Auto-commit on exit (or rollback if error)
     # Closes + commits
 ```
@@ -83,19 +84,20 @@ async def handle_enqueue_event(...):
 
 ## ✅ Benefits
 
-| Benefit | Impact |
-|---------|--------|
-| **Atomicity** | `save + publish` guaranteed to succeed/fail together |
-| **Composability** | Run 2+ use cases in single transaction |
-| **Testability** | UseCase tests don't need transaction context |
-| **Architecture** | Clean separation: Handler orchestrates, UseCase executes |
-| **Flexibility** | Different handlers can have different transaction policies |
+| Benefit           | Impact                                                     |
+| ----------------- | ---------------------------------------------------------- |
+| **Atomicity**     | `save + publish` guaranteed to succeed/fail together       |
+| **Composability** | Run 2+ use cases in single transaction                     |
+| **Testability**   | UseCase tests don't need transaction context               |
+| **Architecture**  | Clean separation: Handler orchestrates, UseCase executes   |
+| **Flexibility**   | Different handlers can have different transaction policies |
 
 ---
 
 ## 📋 What Changes
 
 ### Core Layer (Business Logic)
+
 ```python
 # EnqueueEventUseCase
 # ProcessEventUseCase
@@ -106,6 +108,7 @@ async def handle_enqueue_event(...):
 ```
 
 ### Infrastructure Layer (Orchestration)
+
 ```python
 # app/infrastructure/redis/main.py
 # handle_enqueue_event()
@@ -116,6 +119,7 @@ async def handle_enqueue_event(...):
 ```
 
 ### Tests
+
 ```python
 # Unit Tests (unchanged complexity)
 async def test_enqueue_event():
@@ -138,21 +142,25 @@ async def test_enqueue_handler_atomic(uow_factory):
 ## 🗺️ Implementation Roadmap
 
 ### Phase 1: Refactor Core UseCases (1 day)
+
 - [ ] Remove `async with self.uow:` from EnqueueEventUseCase
 - [ ] Remove `async with self.uow:` from ProcessEventUseCase
 - [ ] Add documentation: "Caller must manage transaction"
 
 ### Phase 2: Update Infrastructure (1 day)
+
 - [ ] Add `async with` wrapper in handle_enqueue_event
 - [ ] Add `async with` wrapper in handle_processing_event_queue
 - [ ] Implement error handling (rollback/ack/nack logic)
 
 ### Phase 3: Migrate Tests (2 days)
+
 - [ ] Unit tests: Verify no transaction context needed
 - [ ] Functional tests: Verify atomicity with new pattern
 - [ ] Integration tests: Verify full handler flow
 
 ### Phase 4: Documentation (1 day)
+
 - [ ] Update development guide
 - [ ] Create examples for new use cases
 - [ ] Document transaction ownership policy
@@ -164,6 +172,7 @@ async def test_enqueue_handler_atomic(uow_factory):
 ## 🎓 Key Architectural Insight
 
 **Old Model** (❌ Problematic):
+
 ```
 UseCase owns transaction scope
   └─ Forces context manager in UseCase
@@ -172,6 +181,7 @@ UseCase owns transaction scope
 ```
 
 **New Model** (✅ Correct):
+
 ```
 Handler owns transaction scope
   └─ UseCase is transaction-agnostic
@@ -186,6 +196,7 @@ Handler owns transaction scope
 **Mejora #2**: Publish event to `processing-event-subject` after enqueue
 
 **With OLD pattern**:
+
 ```
 Handler calls UseCase.execute()
   └─ UseCase opens transaction
@@ -197,6 +208,7 @@ Handler tries to publish
 ```
 
 **With NEW pattern**:
+
 ```
 Handler opens transaction
   ├─ UseCase.execute() saves event
@@ -209,24 +221,26 @@ Handler opens transaction
 
 ## 📊 Decision Matrix
 
-| Criteria | CURRENT | PROPOSED |
-|----------|---------|----------|
-| Atomic save+publish | ❌ | ✅ |
-| Composable | ❌ | ✅ |
-| Clean Arch | ❌ | ✅ |
-| Testable | ⚠️ | ✅ |
-| Effort | 0 (done) | 5 days |
+| Criteria            | CURRENT  | PROPOSED |
+| ------------------- | -------- | -------- |
+| Atomic save+publish | ❌       | ✅       |
+| Composable          | ❌       | ✅       |
+| Clean Arch          | ❌       | ✅       |
+| Testable            | ⚠️       | ✅       |
+| Effort              | 0 (done) | 5 days   |
 
 ---
 
 ## 🔗 Documentation Files
 
 1. **[ANALYSIS_UOW_TRANSACTION_DESIGN.md](ANALYSIS_UOW_TRANSACTION_DESIGN.md)**
+
    - Detailed analysis of 4 alternatives
    - Pros/cons of each approach
    - Why Alternative A is recommended
 
 2. **[DESIGN_COMPARISON_VISUAL.md](DESIGN_COMPARISON_VISUAL.md)**
+
    - Visual diagrams
    - Sequence flows
    - Side-by-side comparisons
@@ -243,6 +257,7 @@ Handler opens transaction
 **Current Status**: ✅ Analysis complete, Decision made
 
 **Next Steps**:
+
 1. ✅ Peer review (you are doing this now)
 2. ⏳ Get stakeholder approval
 3. ⏳ Implement Phase 1-4
@@ -257,4 +272,3 @@ Handler opens transaction
 2. **Should we proceed with the 4-phase implementation plan?**
 3. **Any concerns with removing `async with self.uow` from use cases?**
 4. **Ready to tackle Mejora #2 with this new pattern?**
-

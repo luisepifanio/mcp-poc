@@ -17,7 +17,7 @@ DÍA 1 (HOY): FASE 1 - Refactor UseCase
 ├─ Test: All passing
 └─ Files: app/core/usecases/event_usecases.py
 
-DÍA 2: FASE 2 - Update Handlers  
+DÍA 2: FASE 2 - Update Handlers
 ├─ Add async with AsyncSQLAlchemyUnitOfWork
 ├─ Wrap handler logic
 ├─ Keep error handling
@@ -71,16 +71,16 @@ DÍA 10: MEJORA #4 - Structured Logging
 
 ### Por Fase
 
-| Fase | Métrica | Target | Status |
-|------|---------|--------|--------|
-| **1** | Tests passing | 99+ | 🔴 Pending |
-| **1** | mypy strict | 0 errors | 🟢 Current |
-| **1** | ruff check | 0 issues | 🟢 Current |
-| **2** | Handler wraps | 100% | 🔴 Pending |
-| **2** | Error handling | Complete | 🔴 Pending |
-| **3** | Test coverage | ≥85% | 🟢 Current (92.17%) |
-| **4** | Documentation | Complete | 🔴 Pending |
-| **5** | E2E atomicity | Validated | 🔴 Pending |
+| Fase  | Métrica        | Target    | Status              |
+| ----- | -------------- | --------- | ------------------- |
+| **1** | Tests passing  | 99+       | 🔴 Pending          |
+| **1** | mypy strict    | 0 errors  | 🟢 Current          |
+| **1** | ruff check     | 0 issues  | 🟢 Current          |
+| **2** | Handler wraps  | 100%      | 🔴 Pending          |
+| **2** | Error handling | Complete  | 🔴 Pending          |
+| **3** | Test coverage  | ≥85%      | 🟢 Current (92.17%) |
+| **4** | Documentation  | Complete  | 🔴 Pending          |
+| **5** | E2E atomicity  | Validated | 🔴 Pending          |
 
 ### Globales
 
@@ -123,6 +123,7 @@ async def execute(
 ```
 
 **Archivos similares**:
+
 - app/core/usecases/course_usecases.py (check if has async with)
 
 ---
@@ -153,7 +154,7 @@ async def handle_enqueue_event(
     async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:  # ✅ Context
         usecase = EnqueueEventUseCase(uow)
         result = await usecase.execute(event)
-        
+
         if result.is_ok():
             # MEJORA #2
             await broker.publish(
@@ -169,6 +170,7 @@ async def handle_enqueue_event(
 ```
 
 **Handlers a actualizar**:
+
 - handle_enqueue_event
 - handle_processing_event_queue (future)
 
@@ -194,6 +196,7 @@ async def test_u1_valid_input_new_event(uow_mock):
 ```
 
 **Tests a actualizar**:
+
 - test_enqueue_event_usecase_unit.py
 - test_transition_event_unit.py
 - Otros unit tests
@@ -214,12 +217,12 @@ async with uow_factory() as uow:
 async with uow_factory() as uow:
     use_case = EnqueueEventUseCase(uow)
     result = await use_case.execute(input)
-    
+
     if result.is_ok():
         # Simular publish
         published = await broker.publish({...})
         assert published.is_ok()
-    
+
     # COMMIT automático en __aexit__
 ```
 
@@ -315,33 +318,37 @@ async with uow_factory() as uow:
 
 ## 🚨 Riesgos & Mitigaciones
 
-| Riesgo | Probabilidad | Impacto | Mitigación |
-|--------|------------|--------|-----------|
-| Tests fallan en Fase 1 | Media | Alto | Revert + análisis |
-| Handler context difícil | Baja | Medio | Usar try/finally |
-| Coverage baja en Fase 3 | Baja | Alto | Agregar tests |
-| Documento inconsistente | Baja | Bajo | Peer review |
+| Riesgo                  | Probabilidad | Impacto | Mitigación        |
+| ----------------------- | ------------ | ------- | ----------------- |
+| Tests fallan en Fase 1  | Media        | Alto    | Revert + análisis |
+| Handler context difícil | Baja         | Medio   | Usar try/finally  |
+| Coverage baja en Fase 3 | Baja         | Alto    | Agregar tests     |
+| Documento inconsistente | Baja         | Bajo    | Peer review       |
 
 ---
 
 ## ✨ Beneficios Esperados
 
 ### Después de Fase 1-2
+
 - ✅ Arquitectura limpia: Handler orquesta, UseCase ejecuta
 - ✅ Composición: 2+ use cases en 1 TX
 - ✅ Testing: Use cases más simples sin TX context
 
 ### Después de Fase 3
+
 - ✅ Tests migrados: 100+ passing
 - ✅ Coverage: Mantenido ≥85%
 - ✅ Confianza: Patrón validado
 
 ### Después de Fase 4
+
 - ✅ Documentación clara
 - ✅ Onboarding mejorado
 - ✅ Patrón replicable
 
 ### Después de Fase 5 (Mejora #2)
+
 - ✅ Atomicidad garantizada: save + publish
 - ✅ Event processing pipeline: 100% funcional
 - ✅ Escalable: Listo para Mejora #3-5
@@ -351,11 +358,13 @@ async with uow_factory() as uow:
 ## 🎯 Decisiones Pendientes
 
 **¿Iniciar hoy Fase 1?**
+
 - [ ] Sí, implementar todas las fases esta semana
 - [ ] Sí, pero paso a paso día por día
 - [ ] No, esperar siguiente semana
 
 **¿Parar en Fase 5 o continuar?**
+
 - [ ] Implementar también Mejora #3 (MessagePublisher)
 - [ ] Dejar para siguiente semana
 
