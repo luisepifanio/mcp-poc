@@ -94,7 +94,11 @@ async def test_handle_processing_event_queue_ack_on_success() -> None:
             state=EventState.PENDING,
             payload={"test": "data"},
         )
-        uow_mock.events.get_by_id = AsyncMock(return_value=test_event)
+
+        # Mock getOne() to return Result[Event, ErrorDetail]
+        from result import Ok
+
+        uow_mock.events.getOne = AsyncMock(return_value=Ok(test_event))
 
         # Mock processor
         with patch("app.infrastructure.redis.main.processor_registry") as registry_mock:
@@ -160,7 +164,17 @@ async def test_handle_processing_event_queue_nack_on_event_not_found() -> None:
         uow_mock = AsyncMock()
         uow_mock.__aenter__.return_value = uow_mock
         uow_mock.__aexit__.return_value = None
-        uow_mock.events.get_by_id = AsyncMock(return_value=None)
+
+        # Mock getOne() to return Err (event not found)
+        from result import Err
+
+        from app.errors import ErrorCatalog, ErrorDetail
+
+        uow_mock.events.getOne = AsyncMock(
+            return_value=Err(
+                ErrorDetail(error=ErrorCatalog.NOT_FOUND.value, detail="Event not found")
+            )
+        )
         uow_mock_class.return_value = uow_mock
 
         from uuid import uuid4

@@ -391,17 +391,50 @@ uv run pytest -v --tb=short -x  # -x: stop on first failure
 
 ### Fixture Pattern para DI en Tests
 
+**⚠️ DIRECTIVA CRÍTICA: Mock Solo Métodos Declarados en Interfaces**
+
+**REGLA ABSOLUTA**: Los tests **SOLO** pueden mockear métodos que existen en las interfaces ABC (abstract base classes). Mockear métodos inexistentes es una **FALLA GRAVE** que invalida los tests.
+
+**❌ PROHIBIDO**:
+```python
+# ❌ get_by_id() NO existe en EventRepository interface
+uow_mock.events.get_by_id = AsyncMock(return_value=event)
+```
+
+**✅ CORRECTO**:
+```python
+# ✅ getOne() SÍ existe en EventRepository interface
+from result import Ok
+uow_mock.events.getOne = AsyncMock(return_value=Ok(event))
+```
+
+**Por qué es crítico**:
+1. Los tests deben validar código que se ejecuta en runtime
+2. Mockear métodos inexistentes eleva cobertura SIN validar requerimientos
+3. Genera falsa sensación de seguridad
+4. Los errores solo aparecen en producción
+
+**Validación antes de mockear**:
+```bash
+# Siempre verificar que el método existe en la interfaz
+grep -n "async def nombre_metodo" app/core/repository*.py
+```
+
 **Crear mock de UnitOfWork** (en `tests/unit/conftest.py`):
 
 ```python
 from unittest.mock import AsyncMock, MagicMock
+from result import Ok
 
 @pytest.fixture
 def uow_mock() -> MagicMock:
     """Mock de UnitOfWork para unit tests"""
     mock = MagicMock(spec=UnitOfWork)
     mock.events = MagicMock()
+    # ✅ Solo mockear métodos que existen en EventRepository interface
     mock.events.save_or_resolve_one = AsyncMock()
+    mock.events.getOne = AsyncMock()  # ✅ Existe en interface
+    mock.events.getMany = AsyncMock()  # ✅ Existe en interface
     mock.__aenter__ = AsyncMock(return_value=mock)
     mock.__aexit__ = AsyncMock(return_value=None)
     return mock
@@ -412,6 +445,7 @@ def uow_mock() -> MagicMock:
 ```python
 @pytest.mark.asyncio
 async def test_something(uow_mock):
+    # ✅ Mock retorna Result type como la interfaz define
     uow_mock.events.save_or_resolve_one = AsyncMock(return_value=Ok([event]))
 
     use_case = EnqueueEventUseCase(uow=uow_mock)
@@ -678,7 +712,8 @@ class EventRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, id: UUID) -> Result[Event, ErrorDetail]:
+    async def getOne(self, id: UUID) -> Result[Event, ErrorDetail]:
+        """Retrieves an event by its ID. Returns Result[Event, ErrorDetail]."""
         pass
 
 # Implementation (app/infrastructure/db/repository_event.py)
@@ -690,6 +725,15 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         self.session.add(event)
         await self.session.flush()
         return Ok(event)
+    
+    async def getOne(self, id: UUID) -> Result[Event, ErrorDetail]:
+        result = await self.getMany([id])
+        if result.is_err():
+            return result
+        events = result.unwrap()
+        if len(events) == 0:
+            return Err(ErrorDetail(error=ErrorCatalog.NOT_FOUND, detail=f"Event {id} not found"))
+        return Ok(events[0])
 ```
 
 ### Unit of Work Pattern
@@ -774,12 +818,12 @@ class EventRepository:
     async def get_by_date_range(self, start, end):  # Nunca usado
         pass
 
-    async def get_by_id(self, id: UUID):  # ✅ Usado
+    async def getOne(self, id: UUID):  # ✅ Usado
         pass
 
 # ✅ BUENO: Solo métodos requeridos
 class EventRepository:
-    async def get_by_id(self, id: UUID):  # ✅ Usado por UseCases
+    async def getOne(self, id: UUID):  # ✅ Usado por UseCases
         pass
 ```
 
@@ -1127,13 +1171,13 @@ El **Processor Pattern** es el mecanismo central que procesa eventos de forma ex
 ```python
 class ApiCallProcessor(IProcessor):
     """Procesa eventos realizando llamadas HTTP a APIs externas"""
-    
+
     async def process(self, event: Event) -> Result[dict, ErrorType]:
         # Config: 5 intentos max, retry = 2x100ms rápido + exponencial
         # 2x100ms = 200ms rápido
         # Luego: 500ms, 1000ms, 2000ms exponencial
         # p95 total = 1700ms (UX-optimizado)
-        
+
         # Error classification:
         # - 4xx errors → PERMANENT (no retry)
         # - 5xx errors → TRANSIENT (retry)
@@ -1141,6 +1185,7 @@ class ApiCallProcessor(IProcessor):
 ```
 
 **Retry Timeline**:
+
 - Attempt 1: 0ms (immediate)
 - Attempt 2: 100ms
 - Attempt 3: 100ms + 500ms = 600ms
@@ -1155,11 +1200,11 @@ class ApiCallProcessor(IProcessor):
 ```python
 class GrpcProcessor(IProcessor):
     """Procesa eventos realizando llamadas gRPC"""
-    
+
     async def process(self, event: Event) -> Result[dict, ErrorType]:
         # Config: 5 intentos max, retry rápido (400ms)
         # Más rápido que HTTP por protocolo binario
-        
+
         # Error classification por gRPC status codes
         # - NOT_FOUND, INVALID_ARGUMENT → PERMANENT
         # - UNAVAILABLE, DEADLINE_EXCEEDED → TRANSIENT
@@ -1174,11 +1219,11 @@ class GrpcProcessor(IProcessor):
 ```python
 class LocalUseCaseProcessor(IProcessor):
     """Procesa eventos ejecutando UseCases locales"""
-    
+
     async def process(self, event: Event) -> Result[dict, ErrorType]:
         # Config: 3 intentos max (menos que HTTP)
         # Retry más rápido: sin red overhead
-        
+
         # Error classification local
         # - ValueError, TypeError → PERMANENT (bugs)
         # - Database timeouts → TRANSIENT
@@ -1193,7 +1238,7 @@ class LocalUseCaseProcessor(IProcessor):
 ```python
 class NoOpProcessor(IProcessor):
     """Procesador por defecto para eventos no registrados"""
-    
+
     async def process(self, event: Event) -> Result[dict, ErrorType]:
         # Retorna PERMANENT error inmediatamente
         # No hay reintentos
@@ -1237,7 +1282,7 @@ result = await http.get("https://api.example.com/user/123")
 
 ### Processor Registry
 
-**Ubicación**: [app/infrastructure/processors/__init__.py](app/infrastructure/processors/__init__.py)
+**Ubicación**: [app/infrastructure/processors/**init**.py](app/infrastructure/processors/__init__.py)
 
 ```python
 processor_registry: dict[str, IProcessor] = {
@@ -1263,20 +1308,20 @@ async def handle_processing_event_queue(event_body, msg):
         event.processor_type,
         NoOpProcessor()  # Fallback si no existe
     )
-    
+
     # 2. Ejecutar con reintentos
     result = await AsyncRetrying(
         stop=stop_after_attempt(processor.max_attempts),
         retry=retry_if_exception(classify_error),
         wait=wait_exponential(multiplier=0.1)
     ).wraps(processor.process)(event)
-    
+
     # 3. Clasificar error
     if result.is_err():
         error_type = classify_error(result.unwrap_err())
         # PERMANENT → FAILED
         # TRANSIENT → TEMPORAL_ERROR
-    
+
     # 4. Transicionar estado
     await use_case.execute(
         event,
@@ -1285,7 +1330,7 @@ async def handle_processing_event_queue(event_body, msg):
         is_failed=error_type == ErrorType.PERMANENT,
         is_temporal_error=error_type == ErrorType.TRANSIENT
     )
-    
+
     # 5. Publicar a DLQ si FAILED/EXHAUSTED
     if event.state in [EventState.FAILED, EventState.EXHAUSTED]:
         await message_publisher.publish_failed_event(event, error)
@@ -1335,20 +1380,20 @@ class AsyncLongRunningProcessor(IProcessor):
     async def process(self, event: Event) -> Result[dict, ErrorType]:
         # 1. Crear task en background
         task = asyncio.create_task(self._long_running_work())
-        
+
         # 2. Registrar callback topic
         callback_topic = f"event-result-{event.id}"
-        
+
         # 3. Retornar pendiente
         return Ok({"callback_topic": callback_topic, "task_id": task.id})
-    
+
     async def _long_running_work(self):
         # Trabajo que toma minutos/horas
         result = await expensive_computation()
-        
+
         # Publicar resultado al callback topic
         await broker.publish(result, stream=callback_topic)
-        
+
         # Handler externo recibe y completa el evento
 ```
 
@@ -1363,21 +1408,21 @@ class AsyncLongRunningProcessor(IProcessor):
 ```python
 class IMessagePublisher(ABC):
     """Abstracción para publicar eventos a broker"""
-    
+
     @abstractmethod
     async def publish_failed_event(
         self, event: Event, error: str
     ) -> Result[None, ErrorDetail]:
         """Publica evento FAILED a DLQ"""
         pass
-    
+
     @abstractmethod
     async def publish_exhausted_event(
         self, event: Event, error: str
     ) -> Result[None, ErrorDetail]:
         """Publica evento EXHAUSTED (reintentos agotados) a DLQ"""
         pass
-    
+
     @abstractmethod
     async def publish_success_event(
         self, event: Event, result: dict
@@ -1393,7 +1438,7 @@ class IMessagePublisher(ABC):
 ```python
 class RedisMessagePublisher(IMessagePublisher):
     """Publica eventos a Redis Streams"""
-    
+
     async def publish_failed_event(self, event: Event, error: str):
         # Estructura del mensaje
         message = {
@@ -1411,7 +1456,7 @@ class RedisMessagePublisher(IMessagePublisher):
                 "last_error": event.last_error,
             }
         }
-        
+
         # Publicar a stream "dlq-subject"
         await broker.publish(message, stream="dlq-subject")
 ```
@@ -1427,7 +1472,7 @@ class RedisMessagePublisher(IMessagePublisher):
   "error": "HTTP 400: Invalid email format",
   "timestamp": "2025-12-28T15:30:45.123456",
   "type": "FAILED",
-  "payload": {"email": "invalid-email"},
+  "payload": { "email": "invalid-email" },
   "context": {
     "processor_type": "api_call",
     "attempt": 5,
@@ -1447,7 +1492,7 @@ class RedisMessagePublisher(IMessagePublisher):
 ```python
 async def handle_dlq_message(body: dict, msg: RawMessage) -> None:
     """Consume eventos FAILED/EXHAUSTED desde DLQ"""
-    
+
     try:
         # Structured logging con contexto completo
         logger.info(
@@ -1461,7 +1506,7 @@ async def handle_dlq_message(body: dict, msg: RawMessage) -> None:
                 "error": body.get("error", "unknown"),
             }
         )
-        
+
         # Manejo diferenciado por tipo
         if body.get("type") == "FAILED":
             # Error permanente - investigar
@@ -1469,10 +1514,10 @@ async def handle_dlq_message(body: dict, msg: RawMessage) -> None:
         elif body.get("type") == "EXHAUSTED":
             # Reintentos agotados - escalar
             logger.warning("Retries exhausted - escalate", extra=body)
-        
+
         # Ack: mensaje procesado
         await msg.ack()
-        
+
     except Exception as e:
         # Nack: error al procesar, reintentar después
         logger.exception("DLQ handler failed", extra={"error": str(e)})
@@ -1537,18 +1582,20 @@ async def test_api_processor_transient_error(processor):
 async def test_happy_path_pending_to_completed():
     """Flow: PENDING → PROCESSING → COMPLETED"""
     event = create_event(processor_type="api_call", ...)
-    
+
     # 1. Enqueue
     await enqueue_use_case.execute(...)
-    
+
     # 2. Publicar a cola
     await broker.publish(event, stream="processing-event-subject")
-    
+
     # 3. Handler procesa
     await handle_processing_event_queue(event, msg)
-    
+
     # 4. Verificar estado final
-    db_event = await repo.get_by_id(event.id)
+    event_result = await repo.getOne(event.id)
+    assert event_result.is_ok()
+    db_event = event_result.unwrap()
     assert db_event.state == EventState.COMPLETED
     assert db_event.result_data == {"status": 200}
 
@@ -1556,7 +1603,7 @@ async def test_happy_path_pending_to_completed():
 async def test_transient_error_with_retry():
     """Flow: PENDING → TEMPORAL_ERROR → RETRYING"""
     event = create_event(processor_type="api_call", ...)
-    
+
     # Mock: primeros 2 intentos fallan (503), tercero éxito
     processor_mock.process = AsyncMock(
         side_effect=[
@@ -1565,9 +1612,9 @@ async def test_transient_error_with_retry():
             Ok({"status": 200})
         ]
     )
-    
+
     await handle_processing_event_queue(event, msg)
-    
+
     # Debe reintentarse
     assert processor_mock.process.call_count >= 2
 
@@ -1575,17 +1622,17 @@ async def test_transient_error_with_retry():
 async def test_permanent_error_no_retry():
     """Flow: PENDING → FAILED (sin reintentos)"""
     event = create_event(processor_type="api_call", ...)
-    
+
     # Mock: error 400
     processor_mock.process = AsyncMock(
         return_value=Err(ErrorType.PERMANENT)
     )
-    
+
     await handle_processing_event_queue(event, msg)
-    
+
     # Sin reintentos - intenta una sola vez
     assert processor_mock.process.call_count == 1
-    
+
     # Publicado a DLQ
     published_messages = await dlq_handler.get_published()
     assert len(published_messages) == 1
@@ -1631,10 +1678,10 @@ def classify_error(event: Event, error: Exception) -> ErrorType:
 @app.event("dlq-subject")
 async def handle_dlq(event: dict) -> None:
     logger.error(f"Event {event['event_id']} failed: {event['error']}")
-    
+
     # Alertar a equipo
     await send_slack_notification(event)
-    
+
     # O guardar en analytics BD
     await analytics_db.save_failure(event)
 ```
@@ -1648,11 +1695,13 @@ async def handle_dlq(event: dict) -> None:
 **Síntoma**: Evento permanece en TEMPORAL_ERROR por horas
 
 **Causas**:
+
 - Servicio externo inestable (retornando 503)
 - Timeout de red recurrente
 - Límite de reintentos no alcanzado
 
 **Solución**:
+
 1. Verificar logs de DLQ
 2. Monitorear servicio externo
 3. Aumentar max_attempts si es necesario
@@ -1662,10 +1711,12 @@ async def handle_dlq(event: dict) -> None:
 **Síntoma**: Error que debería reintentarse marca como FAILED
 
 **Causas**:
+
 - Clasificación de error incorrecta
 - Error no mapeado a TRANSIENT
 
 **Solución**:
+
 1. Revisar error classification logic
 2. Agregar nuevo error a TRANSIENT_ERRORS
 3. Reprocessar manualmente
@@ -1675,11 +1726,13 @@ async def handle_dlq(event: dict) -> None:
 **Síntoma**: Muchos eventos en DLQ, poco movimiento
 
 **Causas**:
+
 - Handler dlq_handler caído
 - Topic "dlq-subject" no subscrito
 - Lógica de handler crasheando
 
 **Solución**:
+
 1. Verificar logs de handler
 2. Revisar subscripción al topic
 3. Hacer debug del handler code
@@ -1689,10 +1742,12 @@ async def handle_dlq(event: dict) -> None:
 **Síntoma**: Evento no procesado, evento sigue en PROCESSING
 
 **Causas**:
+
 - Procesador no registrado
 - Nombre de tipo incorrecto
 
 **Solución**:
+
 1. Verificar processor_registry
 2. Validar event.processor_type
 3. Agregar logging antes de get()
@@ -1784,12 +1839,12 @@ Si estás implementando una feature:
 
 ## 📝 Document Versioning
 
-| Versión | Fecha      | Cambios                                                                                                                                                                                                     |
-| ------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Versión | Fecha      | Cambios                                                                                                                                                                                                                                                                                                                                         |
+| ------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | v3.0    | 2025-12-28 | **PROCESSOR PATTERN COMPLETE (Phases 5-6)**: Added comprehensive Processor Pattern documentation covering 4+ processor types (ApiCall, Grpc, LocalUseCase, NoOp), error classification strategy, async/callback pattern, Message Publisher, DLQ routing, comprehensive testing strategy, and troubleshooting guide. 203 tests, 86.92% coverage. |
-| v2.1    | 2025-12-28 | **Added "Lo que no está, no falla" principle**: Agregado como principio core con sección dedicada, ejemplos prácticos, red flags y métricas de éxito. Incluido en Common Pitfalls y Key Takeaways.          |
-| v2.0    | 2025-12-27 | **Complete rewrite**: Reorganizado para ser más práctico y repetible. Added concurrency patterns, simplified commands, added typical workflow example. Agregados principios SOLID explícitamente.           |
-| v1.0    | 2024-12-10 | Versión inicial                                                                                                                                                                                             |
+| v2.1    | 2025-12-28 | **Added "Lo que no está, no falla" principle**: Agregado como principio core con sección dedicada, ejemplos prácticos, red flags y métricas de éxito. Incluido en Common Pitfalls y Key Takeaways.                                                                                                                                              |
+| v2.0    | 2025-12-27 | **Complete rewrite**: Reorganizado para ser más práctico y repetible. Added concurrency patterns, simplified commands, added typical workflow example. Agregados principios SOLID explícitamente.                                                                                                                                               |
+| v1.0    | 2024-12-10 | Versión inicial                                                                                                                                                                                                                                                                                                                                 |
 
 ---
 

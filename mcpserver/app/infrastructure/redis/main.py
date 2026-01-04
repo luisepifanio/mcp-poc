@@ -186,7 +186,7 @@ ProcessingEventSubscriber: Callable[
 
 
 @ProcessingEventSubscriber
-@broker.publisher(stream="result-event-subject")  # <-- listen here
+@broker.publisher(stream="result-event-subject")  # <-- listen here for results
 async def handle_processing_event_queue(
     body: EnqueuedEventUseCaseOutput,
     msg: RedisMessage,
@@ -210,11 +210,13 @@ async def handle_processing_event_queue(
 
         async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
             # Fetch the actual Event entity from DB
-            event = await uow.events.get_by_id(body.id)
-            if not event:
+            event_result = await uow.events.getOne(body.id)
+            if event_result.is_err():
                 logger.error(f"Event {body.id} not found in DB")
                 await msg.nack()
                 return None
+
+            event = event_result.unwrap()
 
             # Get processor from registry (NoOpProcessor if not registered)
             processor = processor_registry.get(event.name)
