@@ -22,7 +22,7 @@ from app.infrastructure.redis.main import handle_processing_event_queue
 
 
 @pytest.fixture
-def broker_mock():
+def broker_mock() -> MagicMock:
     """Fixture: Mock RedisBroker"""
     mock = MagicMock()
     mock.publish = AsyncMock()
@@ -30,10 +30,10 @@ def broker_mock():
 
 
 @pytest.fixture
-async def setup_flow_mocks():
+async def setup_flow_mocks() -> dict[str, MagicMock]:
     """Fixture: Setup common mocks for flow tests"""
 
-    def create_uow_mock(event=None):
+    def create_uow_mock(event: Event | None = None) -> MagicMock:
         """Factory for UoW mock with event"""
         from result import Err, Ok
 
@@ -63,7 +63,9 @@ async def setup_flow_mocks():
 
 
 @pytest.mark.asyncio
-async def test_flow_happy_path_sync_processor_success(setup_flow_mocks):
+async def test_flow_happy_path_sync_processor_success(
+    setup_flow_mocks: dict[str, MagicMock],
+) -> None:
     """
     Test: Happy path - sync processor succeeds.
 
@@ -136,7 +138,9 @@ async def test_flow_happy_path_sync_processor_success(setup_flow_mocks):
 
 
 @pytest.mark.asyncio
-async def test_flow_transient_error_sync_processor(setup_flow_mocks):
+async def test_flow_transient_error_sync_processor(
+    setup_flow_mocks: dict[str, MagicMock],
+) -> None:
     """
     Test: Transient error triggers retry logic.
 
@@ -204,7 +208,9 @@ async def test_flow_transient_error_sync_processor(setup_flow_mocks):
 
 
 @pytest.mark.asyncio
-async def test_flow_permanent_error_no_retry(setup_flow_mocks):
+async def test_flow_permanent_error_no_retry(
+    setup_flow_mocks: dict[str, MagicMock],
+) -> None:
     """
     Test: Permanent error (validation) doesn't retry.
 
@@ -270,7 +276,9 @@ async def test_flow_permanent_error_no_retry(setup_flow_mocks):
 
 
 @pytest.mark.asyncio
-async def test_flow_long_running_processor_callback(setup_flow_mocks):
+async def test_flow_long_running_processor_callback(
+    setup_flow_mocks: dict[str, MagicMock],
+) -> None:
     """
     Test: Long-running processor publishes task and awaits callback.
 
@@ -340,7 +348,7 @@ async def test_flow_long_running_processor_callback(setup_flow_mocks):
 
 
 @pytest.mark.asyncio
-async def test_flow_event_not_found_nack():
+async def test_flow_event_not_found_nack() -> None:
     """
     Test: Event not found in database -> nack message.
 

@@ -35,7 +35,7 @@ from app.infrastructure.processors.long_running_processor import (
 class TestTaskCallbackPayload:
     """Test TaskCallbackPayload Pydantic model."""
 
-    def test_payload_success_status(self):
+    def test_payload_success_status(self) -> None:
         """Test TaskCallbackPayload with success status."""
         event_id = uuid4()
         payload = TaskCallbackPayload(
@@ -49,7 +49,7 @@ class TestTaskCallbackPayload:
         assert payload.result == {"data": "result"}
         assert payload.error is None
 
-    def test_payload_failed_status(self):
+    def test_payload_failed_status(self) -> None:
         """Test TaskCallbackPayload with failed status."""
         event_id = uuid4()
         payload = TaskCallbackPayload(
@@ -63,7 +63,7 @@ class TestTaskCallbackPayload:
         assert payload.error == "Task failed"
         assert payload.result is None
 
-    def test_payload_with_metadata(self):
+    def test_payload_with_metadata(self) -> None:
         """Test TaskCallbackPayload with metadata."""
         event_id = uuid4()
         metadata = {"duration_ms": 5000, "custom": "value"}
@@ -75,7 +75,7 @@ class TestTaskCallbackPayload:
 
         assert payload.metadata == metadata
 
-    def test_payload_invalid_status(self):
+    def test_payload_invalid_status(self) -> None:
         """Test TaskCallbackPayload rejects invalid status."""
         event_id = uuid4()
 
@@ -85,7 +85,7 @@ class TestTaskCallbackPayload:
                 status="unknown",  # Invalid
             )
 
-    def test_payload_allows_extra_fields(self):
+    def test_payload_allows_extra_fields(self) -> None:
         """Test TaskCallbackPayload allows extra fields (extra='allow')."""
         event_id = uuid4()
 
@@ -107,7 +107,7 @@ class TestTaskCallbackPayload:
 class TestScrapingTaskCallbackPayload:
     """Test scraping-specific callback payload."""
 
-    def test_scraping_payload_success(self):
+    def test_scraping_payload_success(self) -> None:
         """Test scraping callback with success."""
         event_id = uuid4()
         metadata = {
@@ -127,7 +127,7 @@ class TestScrapingTaskCallbackPayload:
         assert payload.metadata["url"] == "https://example.com"
         assert payload.metadata["selector_count"] == 42
 
-    def test_scraping_payload_inherits_task_callback(self):
+    def test_scraping_payload_inherits_task_callback(self) -> None:
         """Test that ScrapingTaskCallbackPayload inherits TaskCallbackPayload."""
         event_id = uuid4()
         payload = ScrapingTaskCallbackPayload(
@@ -148,7 +148,7 @@ class TestScrapingTaskCallbackPayload:
 class TestMlInferenceCallbackPayload:
     """Test ML inference-specific callback payload."""
 
-    def test_ml_payload_success(self):
+    def test_ml_payload_success(self) -> None:
         """Test ML inference callback with success."""
         event_id = uuid4()
         metadata = {
@@ -167,7 +167,7 @@ class TestMlInferenceCallbackPayload:
         assert payload.status == "success"
         assert payload.metadata["confidence"] == 0.95
 
-    def test_ml_payload_inherits_task_callback(self):
+    def test_ml_payload_inherits_task_callback(self) -> None:
         """Test that MlInferenceCallbackPayload inherits TaskCallbackPayload."""
         event_id = uuid4()
         payload = MlInferenceCallbackPayload(
@@ -188,7 +188,7 @@ class TestLongRunningTaskProcessor:
     """Test base LongRunningTaskProcessor."""
 
     @pytest.mark.asyncio
-    async def test_processor_publishes_task(self):
+    async def test_processor_publishes_task(self) -> None:
         """Test that processor publishes task to broker."""
         broker_mock = AsyncMock()
         processor = LongRunningTaskProcessor(broker_mock, task_subject="test-subject")
@@ -208,7 +208,7 @@ class TestLongRunningTaskProcessor:
         assert call_args[0][0]["callback_subject"] == f"event-result-{event.id}"
 
     @pytest.mark.asyncio
-    async def test_processor_returns_pending_callback(self):
+    async def test_processor_returns_pending_callback(self) -> None:
         """Test that processor returns PENDING_CALLBACK status."""
         broker_mock = AsyncMock()
         processor = LongRunningTaskProcessor(broker_mock, task_subject="test-subject")
@@ -224,7 +224,7 @@ class TestLongRunningTaskProcessor:
         assert result.callback_subject == f"event-result-{event.id}"
         assert result.metadata["task_subject"] == "test-subject"
 
-    def test_processor_no_retry_config(self):
+    def test_processor_no_retry_config(self) -> None:
         """Test that long-running processor has no-retry config."""
         broker_mock = AsyncMock()
         processor = LongRunningTaskProcessor(broker_mock, task_subject="test-subject")
@@ -235,7 +235,7 @@ class TestLongRunningTaskProcessor:
         assert config.initial_backoff == 0.0
 
     @pytest.mark.asyncio
-    async def test_processor_handles_publish_error(self):
+    async def test_processor_handles_publish_error(self) -> None:
         """Test processor raises on publish error."""
         broker_mock = AsyncMock()
         broker_mock.publish.side_effect = RuntimeError("Publish failed")
@@ -259,7 +259,7 @@ class TestScrapingProcessor:
     """Test ScrapingProcessor implementation."""
 
     @pytest.mark.asyncio
-    async def test_scraping_processor_uses_correct_subject(self):
+    async def test_scraping_processor_uses_correct_subject(self) -> None:
         """Test that ScrapingProcessor publishes to scraping-task-subject."""
         broker_mock = AsyncMock()
         processor = ScrapingProcessor(broker_mock)
@@ -281,7 +281,7 @@ class TestMlInferenceProcessor:
     """Test MlInferenceProcessor implementation."""
 
     @pytest.mark.asyncio
-    async def test_ml_processor_uses_correct_subject(self):
+    async def test_ml_processor_uses_correct_subject(self) -> None:
         """Test that MlInferenceProcessor publishes to ml-inference-subject."""
         broker_mock = AsyncMock()
         processor = MlInferenceProcessor(broker_mock)
@@ -303,7 +303,7 @@ class TestBatchExportProcessor:
     """Test BatchExportProcessor implementation."""
 
     @pytest.mark.asyncio
-    async def test_batch_processor_uses_correct_subject(self):
+    async def test_batch_processor_uses_correct_subject(self) -> None:
         """Test that BatchExportProcessor publishes to batch-export-subject."""
         broker_mock = AsyncMock()
         processor = BatchExportProcessor(broker_mock)
@@ -330,7 +330,7 @@ class TestCallbackFlow:
     """Test callback flow for long-running tasks."""
 
     @pytest.mark.asyncio
-    async def test_full_callback_flow(self):
+    async def test_full_callback_flow(self) -> None:
         """Test full callback flow: publish task → receive callback."""
         event_id = uuid4()
         broker_mock = AsyncMock()

@@ -26,13 +26,18 @@ from app.core.usecases.event_usecases import (
     ProcessEventUseCase,
 )
 
+from ...core.settings import getAppSettings
 from ..db.connection import get_session
 from ..db.unit_of_work import AsyncSQLAlchemyUnitOfWork
 
 logger = logging.getLogger(__name__)
-# Configuración del broker de Redis
-broker = RedisBroker("redis://localhost:6379")
+
+# Get Redis configuration from settings
+settings = getAppSettings()
+broker = RedisBroker(settings.redis_connection_url)
 app = FastStream(broker)
+
+logger.info(f"Redis broker configured: {settings.redis_connection_url}")
 
 
 def setup_redis_suscriber(
@@ -227,7 +232,7 @@ async def handle_processing_event_queue(
             max_backoff = processor.get_retry_config().max_backoff
 
             result = None
-            last_error = None
+            last_error: BaseException | None = None
 
             try:
                 async for attempt in AsyncRetrying(

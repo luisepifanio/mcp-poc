@@ -7,7 +7,9 @@ Processors for operations that complete quickly:
 - Local use case execution
 """
 
+import importlib
 import logging
+from types import ModuleType
 from typing import Any
 
 import httpx
@@ -30,9 +32,10 @@ from app.core.processors import (
 logger = logging.getLogger(__name__)
 
 # Optional gRPC support
+grpc: ModuleType | None
 try:
-    import grpc
-except ImportError:
+    grpc = importlib.import_module("grpc")
+except ImportError:  # pragma: no cover - optional dependency
     grpc = None
 
 
@@ -80,18 +83,31 @@ class ApiCallProcessor(IEventProcessor):
         payload = event.payload or {}
 
         # Validate required fields
-        method = payload.get("method", "GET").upper()
+        method_str = payload.get("method", "GET")
+        if not isinstance(method_str, str):
+            raise ValueError("API call requires 'method' to be a string in payload")
+        method = method_str.upper()
+
         url = payload.get("url")
-        if not url:
-            raise ValueError("API call requires 'url' in payload")
+        if not isinstance(url, str):
+            raise ValueError("API call requires 'url' to be a string in payload")
 
         if method not in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"):
             raise ValueError(f"Invalid HTTP method: {method}")
 
         # Extract parameters
-        headers = payload.get("headers", {})
+        headers_raw = payload.get("headers", {})
+        headers: dict[str, str]
+        if isinstance(headers_raw, dict):
+            headers = {str(k): str(v) for k, v in headers_raw.items()}
+        else:
+            headers = {}
+
         body = payload.get("body")
-        timeout = float(payload.get("timeout", self.timeout))
+        timeout_value = payload.get("timeout", self.timeout)
+        if not isinstance(timeout_value, (int, float)):
+            timeout_value = self.timeout
+        timeout = float(timeout_value)
 
         self.logger.info(
             f"API call: {method} {url}",
@@ -145,11 +161,16 @@ class ApiCallProcessor(IEventProcessor):
                 with attempt:
                     return await _make_request()
         except RetryError as e:
+            last_exception = e.last_attempt.exception()
             self.logger.error(
-                f"API call failed after retries: {e.last_attempt.exception()}",
+                f"API call failed after retries: {last_exception}",
                 extra={"event_id": str(event.id), "url": url},
             )
-            raise e.last_attempt.exception() from e
+            if last_exception is not None:
+                raise last_exception from e
+            raise ValueError("API call failed after retries") from e
+
+        raise RuntimeError("API call did not complete")
 
     def get_retry_config(self) -> RetryConfig:
         """
@@ -168,7 +189,7 @@ class ApiCallProcessor(IEventProcessor):
             fast_retry_delay=0.1,  # 100ms
         )
 
-    def classify_error(self, exc: Exception) -> ErrorType:
+    def classify_error(self, exc: BaseException) -> ErrorType:
         """
         Classify API errors for retry strategy.
 
@@ -245,7 +266,10 @@ class GrpcProcessor(IEventProcessor):
         if not service or not method:
             raise ValueError("gRPC call requires 'service' and 'method' in payload")
 
-        timeout = float(payload.get("timeout", self.timeout))
+        timeout_value = payload.get("timeout", self.timeout)
+        if not isinstance(timeout_value, (int, float)):
+            timeout_value = self.timeout
+        timeout = float(timeout_value)
 
         self.logger.info(
             f"gRPC call: {service}.{method}",
@@ -280,7 +304,7 @@ class GrpcProcessor(IEventProcessor):
             fast_retry_delay=0.05,  # 50ms
         )
 
-    def classify_error(self, exc: Exception) -> ErrorType:
+    def classify_error(self, exc: BaseException) -> ErrorType:
         """
         Classify gRPC errors for retry strategy.
 
@@ -358,7 +382,8 @@ class LocalUseCaseProcessor(IEventProcessor):
         payload = event.payload or {}
 
         use_case_name = payload.get("use_case_name")
-        use_case_input = payload.get("input", {})
+        raw_input = payload.get("input", {})
+        use_case_input = raw_input if isinstance(raw_input, dict) else {}
 
         if not use_case_name:
             raise ValueError("Local use case requires 'use_case_name' in payload")
@@ -395,7 +420,7 @@ class LocalUseCaseProcessor(IEventProcessor):
             fast_retry_delay=0.05,  # 50ms
         )
 
-    def classify_error(self, exc: Exception) -> ErrorType:
+    def classify_error(self, exc: BaseException) -> ErrorType:
         """
         Classify local use case errors.
 

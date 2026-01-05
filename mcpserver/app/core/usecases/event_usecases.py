@@ -1,4 +1,5 @@
 import json
+from collections.abc import MutableMapping
 from datetime import UTC
 from typing import cast
 from uuid import UUID, uuid4
@@ -251,21 +252,29 @@ class ProcessEventUseCase(
 
         from app.core.processor_registry import processor_registry
 
-        # Convert Event entity to EnqueuedEventUseCaseInput if needed
         if isinstance(input, Event):
-            event_input = EnqueuedEventUseCaseInput(
-                name=input.name,
-                payload=input.payload or {},
-                id=input.id,
-                external_uuid=input.external_uuid,
-                context=input.context or {},
-                state=input.state,
-            )
+            event_entity = input
         else:
-            event_input = input
+            event_entity = Event(
+                id=input.id or uuid4(),
+                name=input.name,
+                external_uuid=input.external_uuid,
+                payload=input.payload or {},
+                context=input.context or {},
+                state=input.state or EventState.CREATED,
+            )
 
-        # Get processor (may be NoOpProcessor if not registered)
-        processor = processor_registry.get(event_input.name)
+        if not isinstance(event_entity.context, MutableMapping):
+            event_entity.context = {}
+        context: JSONDict = event_entity.context
+        event_entity.context = context
+
+        if not isinstance(event_entity.payload, MutableMapping):
+            event_entity.payload = {}
+        payload: JSONDict = event_entity.payload
+        event_entity.payload = payload
+
+        processor = processor_registry.get(event_entity.name)
 
         # Determine final state
         if is_failed:
@@ -278,36 +287,44 @@ class ProcessEventUseCase(
             final_state = EventState.PROCESSING
 
         # Transition event to final state
-        transition_result = transition_event(event_input, final_state)
+        transition_result = transition_event(event_entity, final_state)
         if transition_result.is_err():
             return Err(transition_result.unwrap_err())
 
         # Update context with processing metadata
-        if "processing" not in event_input.context:
-            event_input.context["processing"] = {}
+        processing_ctx_raw = context.get("processing")
+        if not isinstance(processing_ctx_raw, MutableMapping):
+            processing_ctx_raw = {}
+            context["processing"] = processing_ctx_raw
+        processing_ctx: JSONDict = processing_ctx_raw
 
-        event_input.context["processing"]["started_at"] = datetime.now(UTC).isoformat()
-        event_input.context["processing"]["processor"] = processor.__class__.__name__
+        processing_ctx["started_at"] = datetime.now(UTC).isoformat()
+        processing_ctx["processor"] = processor.__class__.__name__
 
         # Add processor-specific metadata if provided
         if processing_metadata:
-            event_input.context["processing"].update(processing_metadata)
+            processing_ctx.update(processing_metadata)
 
         # Store result or error
+        result_struct: EventResultStructure | None = None
         if result_data:
-            event_input.result = result_data
-            event_input.context["processing"]["completed_at"] = datetime.now(
-                UTC
-            ).isoformat()
+            result_struct = {"payload": result_data}
+            processing_ctx["completed_at"] = datetime.now(UTC).isoformat()
         elif error:
-            if "error" not in event_input.context:
-                event_input.context["error"] = {}
-            event_input.context["error"]["message"] = error
-            event_input.context["error"]["processor"] = processor.__class__.__name__
-            event_input.context["error"]["occurred_at"] = datetime.now(UTC).isoformat()
+            error_ctx_raw = context.get("error")
+            if not isinstance(error_ctx_raw, MutableMapping):
+                error_ctx_raw = {}
+                context["error"] = error_ctx_raw
+            error_ctx: JSONDict = error_ctx_raw
+            error_ctx["message"] = error
+            error_ctx["processor"] = processor.__class__.__name__
+            error_ctx["occurred_at"] = datetime.now(UTC).isoformat()
+
+        if result_struct is not None:
+            event_entity.result = result_struct
 
         # Save event with all transitions and context updates
-        save_result = await self.uow.events.save(event_input)
+        save_result = await self.uow.events.save(event_entity)
         return save_result.and_then(lambda saved_event: Ok(self.as_output(saved_event)))
 
     def as_output(self, event: Event) -> EnqueuedEventUseCaseOutput:

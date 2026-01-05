@@ -396,12 +396,14 @@ uv run pytest -v --tb=short -x  # -x: stop on first failure
 **REGLA ABSOLUTA**: Los tests **SOLO** pueden mockear métodos que existen en las interfaces ABC (abstract base classes). Mockear métodos inexistentes es una **FALLA GRAVE** que invalida los tests.
 
 **❌ PROHIBIDO**:
+
 ```python
 # ❌ get_by_id() NO existe en EventRepository interface
 uow_mock.events.get_by_id = AsyncMock(return_value=event)
 ```
 
 **✅ CORRECTO**:
+
 ```python
 # ✅ getOne() SÍ existe en EventRepository interface
 from result import Ok
@@ -409,12 +411,14 @@ uow_mock.events.getOne = AsyncMock(return_value=Ok(event))
 ```
 
 **Por qué es crítico**:
+
 1. Los tests deben validar código que se ejecuta en runtime
 2. Mockear métodos inexistentes eleva cobertura SIN validar requerimientos
 3. Genera falsa sensación de seguridad
 4. Los errores solo aparecen en producción
 
 **Validación antes de mockear**:
+
 ```bash
 # Siempre verificar que el método existe en la interfaz
 grep -n "async def nombre_metodo" app/core/repository*.py
@@ -725,7 +729,7 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
         self.session.add(event)
         await self.session.flush()
         return Ok(event)
-    
+
     async def getOne(self, id: UUID) -> Result[Event, ErrorDetail]:
         result = await self.getMany([id])
         if result.is_err():

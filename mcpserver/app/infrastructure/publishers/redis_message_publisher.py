@@ -12,6 +12,7 @@ Stream: dlq-subject
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from faststream.redis import RedisBroker
 
@@ -130,7 +131,7 @@ class RedisMessagePublisher(IMessagePublisher):
             raise
 
     async def publish_success_event(
-        self, event: Event, result: dict | None = None
+        self, event: Event, result: dict[str, Any] | None = None
     ) -> None:
         """
         Publish successfully processed event (optional).

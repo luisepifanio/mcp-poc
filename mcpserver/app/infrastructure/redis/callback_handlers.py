@@ -6,11 +6,14 @@ Listens on dynamic "event-result-{event_id}" streams.
 """
 
 import logging
+from collections.abc import MutableMapping
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from faststream import Context
 from faststream.redis import RedisMessage
 
+from app.core.entities import EventResultStructure, EventState, JSONDict
 from app.infrastructure.db.unit_of_work import AsyncSQLAlchemyUnitOfWork
 from app.infrastructure.processors import TaskCallbackPayload
 
@@ -20,7 +23,7 @@ logger = logging.getLogger(__name__)
 async def handle_task_callback(
     body: TaskCallbackPayload,
     msg: RedisMessage,
-    session=Context("session"),
+    session: Any = Context("session"),
 ) -> None:
     """
     Unified callback handler for all long-running processors.
@@ -57,7 +60,7 @@ async def handle_task_callback(
         # Use existing transaction context from handler
         async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
             # Load event
-            event_result = await uow.events.get_by_id(event_id)
+            event_result = await uow.events.getOne(event_id)
             if event_result.is_err():
                 logger.error(f"Event {event_id} not found for callback")
                 await msg.nack()
@@ -65,9 +68,13 @@ async def handle_task_callback(
 
             event = event_result.unwrap()
 
-            # Verify state (must be PROCESSING with callback metadata)
-            from app.core.entities import EventState
+            # Ensure context is mutable mapping
+            if not isinstance(event.context, MutableMapping):
+                event.context = {}
+            context: JSONDict = event.context
+            event.context = context
 
+            # Verify state (must be PROCESSING with callback metadata)
             if event.state != EventState.PROCESSING:
                 logger.warning(
                     f"Event {event_id} not in PROCESSING state for callback",
@@ -81,35 +88,38 @@ async def handle_task_callback(
                 # Success: Transition PROCESSING → COMPLETED
                 event.state = EventState.COMPLETED
                 if body.result:
-                    event.result = body.result
+                    event.result = cast(EventResultStructure, {"payload": body.result})
 
                 # Update processing metadata
-                if "processing" not in event.context:
-                    event.context["processing"] = {}
-                event.context["processing"]["completed_at"] = datetime.now(
-                    UTC
-                ).isoformat()
+                processing_ctx_raw = context.get("processing")
+                if not isinstance(processing_ctx_raw, MutableMapping):
+                    processing_ctx_raw = {}
+                    context["processing"] = processing_ctx_raw
+                processing_ctx: JSONDict = processing_ctx_raw
+                processing_ctx["completed_at"] = datetime.now(UTC).isoformat()
 
                 # Calculate duration if started_at available
-                if "started_at" in event.context.get("processing", {}):
+                started_at_value = processing_ctx.get("started_at")
+                if isinstance(started_at_value, str):
                     try:
-                        started = datetime.fromisoformat(
-                            event.context["processing"]["started_at"]
-                        )
+                        started = datetime.fromisoformat(started_at_value)
                         duration_ms = int(
                             (datetime.now(UTC) - started).total_seconds() * 1000
                         )
-                        event.context["processing"]["duration_ms"] = duration_ms
+                        processing_ctx["duration_ms"] = duration_ms
                     except Exception:
                         pass  # Unable to calculate, skip
 
                 # Record callback reception
-                if "callback" not in event.context:
-                    event.context["callback"] = {}
-                event.context["callback"]["received_at"] = datetime.now(UTC).isoformat()
-                event.context["callback"]["status"] = "success"
+                callback_ctx_raw = context.get("callback")
+                if not isinstance(callback_ctx_raw, MutableMapping):
+                    callback_ctx_raw = {}
+                    context["callback"] = callback_ctx_raw
+                success_callback_ctx: JSONDict = callback_ctx_raw
+                success_callback_ctx["received_at"] = datetime.now(UTC).isoformat()
+                success_callback_ctx["status"] = "success"
                 if body.metadata:
-                    event.context["callback"]["metadata"] = body.metadata
+                    success_callback_ctx["metadata"] = cast(JSONDict, body.metadata)
 
                 logger.info(f"Event {event_id} completed via callback")
 
@@ -118,19 +128,25 @@ async def handle_task_callback(
                 event.state = EventState.FAILED
 
                 # Record error
-                if "error" not in event.context:
-                    event.context["error"] = {}
-                event.context["error"]["type"] = "task_failed"
-                event.context["error"]["message"] = body.error or "Task failed"
-                event.context["error"]["occurred_at"] = datetime.now(UTC).isoformat()
+                error_ctx_raw = context.get("error")
+                if not isinstance(error_ctx_raw, MutableMapping):
+                    error_ctx_raw = {}
+                    context["error"] = error_ctx_raw
+                error_ctx: JSONDict = error_ctx_raw
+                error_ctx["type"] = "task_failed"
+                error_ctx["message"] = body.error or "Task failed"
+                error_ctx["occurred_at"] = datetime.now(UTC).isoformat()
 
                 # Record callback reception
-                if "callback" not in event.context:
-                    event.context["callback"] = {}
-                event.context["callback"]["received_at"] = datetime.now(UTC).isoformat()
-                event.context["callback"]["status"] = "failed"
+                callback_ctx_raw = context.get("callback")
+                if not isinstance(callback_ctx_raw, MutableMapping):
+                    callback_ctx_raw = {}
+                    context["callback"] = callback_ctx_raw
+                failure_callback_ctx: JSONDict = callback_ctx_raw
+                failure_callback_ctx["received_at"] = datetime.now(UTC).isoformat()
+                failure_callback_ctx["status"] = "failed"
                 if body.metadata:
-                    event.context["callback"]["metadata"] = body.metadata
+                    failure_callback_ctx["metadata"] = cast(JSONDict, body.metadata)
 
                 logger.error(
                     f"Event {event_id} failed via callback: {body.error}",

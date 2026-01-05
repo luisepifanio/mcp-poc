@@ -12,6 +12,7 @@ Test Categories:
 
 import asyncio
 from collections.abc import AsyncGenerator
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -49,9 +50,9 @@ async def test_c1_concurrent_same_external_uuid(
     # Arrange: Create a fixed external_uuid to force collision
     shared_external_uuid = uuid4()
 
-    async def make_request() -> dict:
+    async def make_request() -> dict[str, Any]:
         """Execute one EnqueueEventUseCase request."""
-        async with uow_factory() as uow:
+        async with uow_factory() as uow:  # type: ignore
             use_case = EnqueueEventUseCase(uow=uow)
             input_data = EnqueuedEventUseCaseInput(
                 name="ConcurrentEvent",
@@ -117,9 +118,9 @@ async def test_c2_concurrent_same_internal_id(
     # Arrange: Create a fixed internal id (UUID) to force collision
     shared_id = uuid4()
 
-    async def make_request(request_num: int) -> dict:
+    async def make_request(request_num: int) -> dict[str, Any]:
         """Execute one EnqueueEventUseCase request."""
-        async with uow_factory() as uow:
+        async with uow_factory() as uow:  # type: ignore
             use_case = EnqueueEventUseCase(uow=uow)
             input_data = EnqueuedEventUseCaseInput(
                 name=f"ConcurrentEvent-{request_num}",
@@ -207,9 +208,9 @@ async def test_c3_concurrent_mixed_id_and_external_uuid(
     shared_external_uuid = uuid4()
     explicit_id = uuid4()
 
-    async def request_with_explicit_id() -> dict:
+    async def request_with_explicit_id() -> dict[str, Any]:
         """Colisiona con external_uuid compartido pero fuerza un ID explícito."""
-        async with uow_factory() as uow:
+        async with uow_factory() as uow:  # type: ignore
             use_case = EnqueueEventUseCase(uow=uow)
             input_data = EnqueuedEventUseCaseInput(
                 name="Mixed-Explicit-ID",
@@ -227,9 +228,9 @@ async def test_c3_concurrent_mixed_id_and_external_uuid(
                 "state": output.state,
             }
 
-    async def request_with_different_id() -> dict:
+    async def request_with_different_id() -> dict[str, Any]:
         """Colisiona por el mismo external_uuid pero propone un ID distinto."""
-        async with uow_factory() as uow:
+        async with uow_factory() as uow:  # type: ignore
             use_case = EnqueueEventUseCase(uow=uow)
             input_data = EnqueuedEventUseCaseInput(
                 name="Mixed-Different-ID",

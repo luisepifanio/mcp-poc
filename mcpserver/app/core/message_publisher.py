@@ -13,6 +13,7 @@ Design:
 """
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from .entities import Event
 
@@ -51,7 +52,7 @@ class IMessagePublisher(ABC):
 
     @abstractmethod
     async def publish_success_event(
-        self, event: Event, result: dict | None = None
+        self, event: Event, result: dict[str, Any] | None = None
     ) -> None:
         """
         Publish a successfully processed event (optional).

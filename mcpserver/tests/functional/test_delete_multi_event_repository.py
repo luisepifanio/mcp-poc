@@ -3,9 +3,11 @@ import logging
 # Get a logger for this module
 from collections.abc import AsyncGenerator
 from datetime import datetime
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
+from pytest_mock import MockerFixture
 from result import Err, Ok
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, select
@@ -47,7 +49,7 @@ async def events_in_db(dbsession: AsyncSession) -> AsyncGenerator[list[Event], N
 
 
 @pytest.mark.asyncio
-async def test_soft_delete(dbsession: AsyncSession, events_in_db: list[Event]):
+async def test_soft_delete(dbsession: AsyncSession, events_in_db: list[Event]) -> None:
     repo = AsyncSQLAlchemyEventRepository(dbsession)
 
     event_to_delete = events_in_db[0]
@@ -68,7 +70,7 @@ async def test_soft_delete(dbsession: AsyncSession, events_in_db: list[Event]):
 
 
 @pytest.mark.asyncio
-async def test_hard_delete(dbsession: AsyncSession, events_in_db: list[Event]):
+async def test_hard_delete(dbsession: AsyncSession, events_in_db: list[Event]) -> None:
     repo = AsyncSQLAlchemyEventRepository(dbsession)
 
     event_to_delete = events_in_db[0]
@@ -89,8 +91,8 @@ async def test_hard_delete(dbsession: AsyncSession, events_in_db: list[Event]):
 
 @pytest.mark.asyncio
 async def test_delete_runtime_error_handling(
-    mocker, dbsession: AsyncSession, events_in_db: list[Event]
-):
+    mocker: MockerFixture, dbsession: AsyncSession, events_in_db: list[Event]
+) -> None:
     repo = AsyncSQLAlchemyEventRepository(dbsession)
     event_to_delete = events_in_db[0]
 
@@ -105,7 +107,9 @@ async def test_delete_runtime_error_handling(
 
 
 @pytest.mark.asyncio
-async def test_delete_many_events(dbsession: AsyncSession, events_in_db: list[Event]):
+async def test_delete_many_events(
+    dbsession: AsyncSession, events_in_db: list[Event]
+) -> None:
     events_in_db += [
         Event(
             id=uuid4(),
@@ -119,7 +123,8 @@ async def test_delete_many_events(dbsession: AsyncSession, events_in_db: list[Ev
     result = await repo.delete_multi(events_in_db)
 
     assert isinstance(result, Ok)
-    deleted_report: DeleteTypedDict = result.unwrap()
+    report = result.unwrap()
+    deleted_report: DeleteTypedDict = cast(DeleteTypedDict, report)
     assert isinstance(deleted_report, dict)
     assert (
         deleted_report["total_deleted"] == 2
@@ -141,10 +146,10 @@ async def test_delete_many_events(dbsession: AsyncSession, events_in_db: list[Ev
 
 
 @pytest.mark.asyncio
-async def test_delete_many_events_error(dbsession: AsyncSession):
+async def test_delete_many_events_error(dbsession: AsyncSession) -> None:
     events_in_db = [
         Event(
-            id=None,
+            id=None,  # Intentionally setting id to None # type: ignore
             name="event_not_in_db",
             external_uuid=None,
             state=EventState.COMPLETED,

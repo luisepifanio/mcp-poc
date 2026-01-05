@@ -70,7 +70,7 @@ class ScrapingTaskCallbackPayload(TaskCallbackPayload):
             "example": {
                 "event_id": "550e8400-e29b-41d4-a716-446655440000",
                 "status": "success",
-                "result": {"selectors": 42, "elements": [...]},
+                "result": {"selectors": 42, "elements": ["h1", "p"]},
                 "error": None,
                 "metadata": {
                     "url": "https://example.com",

@@ -90,7 +90,7 @@ class IEventProcessor(ABC):
         """
         pass
 
-    def classify_error(self, exc: Exception) -> ErrorType:
+    def classify_error(self, exc: BaseException) -> ErrorType:
         """
         Classify an error to determine retry strategy.
 

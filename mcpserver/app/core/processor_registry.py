@@ -71,7 +71,7 @@ class NoOpProcessor(IEventProcessor):
             fast_retry_delay=0.0,
         )
 
-    def classify_error(self, exc: Exception) -> ErrorType:
+    def classify_error(self, exc: BaseException) -> ErrorType:
         """Always permanent - missing processor is not retryable."""
         return ErrorType.PERMANENT
 

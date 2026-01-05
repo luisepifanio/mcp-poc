@@ -1,0 +1,23 @@
+repos:
+  - repo: local
+    hooks:
+      - id: validate-test-mocks
+        name: Validate event repository mocks (interface compliance)
+        entry: uv run python scripts/validate_test_mocks.py
+        language: system
+        pass_filenames: false
+      - id: ruff-check
+        name: Ruff lint
+        entry: uv run ruff check .
+        language: system
+        pass_filenames: false
+      - id: mypy
+        name: Mypy (strict)
+        entry: uv run mypy app
+        language: system
+        pass_filenames: false
+      - id: pytest
+        name: Pytest (coverage gate 85%)
+        entry: uv run pytest -q
+        language: system
+        pass_filenames: false

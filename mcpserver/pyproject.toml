@@ -35,7 +35,7 @@ dev = [
 
 [tool.mypy]
 strict = true
-exclude = ["venv", ".venv", "alembic", "app/infrastructure/scrapy_spider"]
+exclude = ["venv", ".venv", "alembic", "tests"]
 
 [tool.ruff]
 target-version = "py312"

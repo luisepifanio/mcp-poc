@@ -12,13 +12,14 @@ Logging mode: Structured logging for monitoring/alerting.
 import logging
 from typing import Any
 
+from faststream import AckPolicy
 from faststream.redis import RedisBroker
 from faststream.redis.annotations import RedisMessage
 
 logger = logging.getLogger(__name__)
 
 
-def setup_dlq_subscriber(broker: RedisBroker):
+def setup_dlq_subscriber(broker: RedisBroker) -> Any:
     """
     Setup DLQ subscriber decorator.
 
@@ -30,7 +31,7 @@ def setup_dlq_subscriber(broker: RedisBroker):
     """
     return broker.subscriber(
         "dlq-subject",
-        ack_policy=None,  # Manual ack
+        ack_policy=AckPolicy.MANUAL,  # Manual ack
     )
 
 
