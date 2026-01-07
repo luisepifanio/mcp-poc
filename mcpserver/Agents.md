@@ -116,56 +116,318 @@ tests/
 
 ## 🔄 Development Workflow
 
-Este workflow es **REPETIBLE** - cada feature sigue estos pasos:
+Esta sección recoge el workflow optimizado para iteraciones rápidas entre desarrolladores y agentes IA, orientado a producir cambios pequeños, verificables y reversibles.
 
-### Step 1: Definir Requerimientos
+Principios clave
+
+- Iteraciones cortas: objetivo claro + tests que validan aceptación.
+- Core antes de infra: implementar lógica de dominio y cubrirla con unit tests antes de tocar infra.
+- Atomicidad explícita: TX1 (lock) y TX2 (outcome) separadas y comprobadas por tests E2E.
+
+Workflow recomendado (pasos mínimos por iteración)
+
+1. Objetivo y criterios (1–3 líneas): listar resultados esperados y los tests que demostrarán éxito.
+2. Diseñar contrato del core (UseCase/Entity): inputs/outputs y estados críticos.
+3. Implementar core + unit tests (cobertura de ramas críticas). Ejecutar solo estos tests hasta verde.
+4. Añadir 1 test funcional crítico (E2E) que valide transacciones, idempotencia o side-effects.
+5. Ejecutar suite completa, revisar fallos y cobertura; priorizar crear tests en módulos con baja cobertura.
+6. Documentar cambios relevantes (breve nota en `Agents.md` o `docs/`) y crear PR pequeño.
+
+Checklist rápido (usar como pre-PR)
+
+- [ ] Objetivo y criterios definidos
+- [ ] Unit tests para el core (rutas felices + errores esperados)
+- [ ] Unit tests verdes localmente
+- [ ] 1 test funcional crítico agregado
+- [ ] Suite completa verde y cobertura aceptable (team/CI gate)
+- [ ] Documentación mínima actualizada
+
+Prácticas operativas para maximizar éxito con agentes IA
+
+- Siempre pedir al agente que devuelva una lista corta de cambios (todo list) antes de aplicar parches.
+- El agente debe ejecutar tests relevantes tras cada cambio y reportar resultados concisos (passed/failed + cobertura parcial).
+- Para E2E DB: persistir con `save_or_resolve_one` o recuperar la fila canónica (`getOne`) antes de pasar entidades al UseCase para evitar IntegrityError por objetos detachados.
+- Si un UseCase hace TX1 (lock), el processor que verifica la persistencia debe leer desde otra sesión (simula consumidor externo).
+- Preferir `merge()`/`session.merge()` en helpers de repositorio cuando tests manipulan instancias detachadas.
+
+Estrategia de testing y cobertura
+
+- Priorizar tests unitarios en módulos core (`app/core/usecases/*`) y en repositorios (`app/infrastructure/db/*`).
+- Cuando la cobertura global falla en CI, identificar top-5 módulos con menor coverage y añadir tests focalizados.
+
+Comunicación y commits
+
+- Commits pequeños y atómicos: cada cambio debe poder revertirse sin afectar otras piezas.
+- Añadir mensajes de commit con referencia a tests agregados (ej: "test(event_usecase): add validate_and_lock unit tests").
+
+Referencias rápidas
+
+- Guía ampliada con ejemplos y checklist: `docs/AGENT_ITERATION_GUIDE.md` (añadida al repo).
+
+### Prompt Templates & TODOs (Ejemplos rápidos)
+
+Usar estas plantillas cuando pidas trabajo al agente para maximizar claridad y velocidad:
+
+- **Implementación puntual** (mínimo, verificable):
+
+  > "Implementar `validate_and_lock` en `ProcessEventIdealUseCase`.
+  > Objetivo: PENDING→PROCESSING persistido (TX1).
+  > Tests: `test_pending_transitions_to_processing`.
+  > Restricciones: no tocar infra ni handlers."
+
+- **Bugfix reproducible**:
+
+  > "Fix IntegrityError en E2E (test_process_event_tx_transactions). Contexto: conflicto por instancia detachada. Reproducir con test, parche minimal usando `session.merge()` o `save_or_resolve_one`, añadir test que falle antes del fix."
+
+- **Refactor + cobertura**:
+
+  > "Refactor `save_or_resolve_one` para usar `merge()` y añadir unit tests que cubran comportamiento en conflicto por `external_uuid`. Mantener API pública estable."
+
+Plantilla de TODO (usar en PR o en el prompt al agente):
 
 ```
-- Escribir descripción clara de la funcionalidad
-- Definir criterios de aceptación
-- Identificar entidades y casos de uso
+TODO:
+- [ ] Objetivo (1–2 líneas): <describir>
+- [ ] Tests unitarios añadidos: <lista de tests>
+- [ ] Tests funcionales añadidos (E2E críticos): <lista de tests>
+- [ ] Lint + mypy pasados
+- [ ] Commit y descripción clara
 ```
 
-### Step 2: Diseño de Solución
+Uso: pegar la plantilla en la descripción del PR o en la petición al agente para asegurar entregas verificables.
 
-```
-- Definir entidades en app/core/entities.py
-- Crear interfaces ABC en app/core/repositories.py o repository_*.py
-- Diseñar contrato del UseCase (Input/Output DTOs)
-```
+### Step 3: Implementación (Core primero)
 
-### Step 3: Implementar (Core → Infrastructure)
+Implementar las 4 etapas en **app/core/usecases/neo_event_usecase.py**:
 
-```
-# 1. Implementar lógica en core/usecases/
-async def execute(self, input: InputDTO) -> Result[OutputDTO, Error]:
-    # Lógica pura, sin dependencias de infraestructura
+#### Etapa 0: Fetch Event (orchestration start)
 
-# 2. Implementar repositorio en infrastructure/db/
-class AsyncSQLAlchemyEventRepository:
-    async def save_or_resolve_one(self, event: Event) -> Result[Event, Error]:
-        # Implementación real con SQLAlchemy
+```python
+async def execute(self, event_id: UUID) -> Result[ProcessEventResult, ErrorDetail]:
+    # Obtener evento por ID
+    result = await self.uow.events.getOne(event_id)
+    if result.is_err():
+        return result  # Short-circuit: fetch error
 
-# 3. Conectar en API (infrastructure/api/routes.py)
-@router.post("/events")
-async def enqueue_event(input: EnqueuedEventUseCaseInput) -> dict:
-    result = await use_case.execute(input)
-    # ...
+    event = result.unwrap()
+    # Continuar con stages 1-3
+    ...
 ```
 
-### Step 4: Testing Validatorio (Unit + Functional)
+#### Etapa 1: Validate & Lock (TX1)
 
+```python
+async def validate_and_lock(self, event: Event) -> Result[Event, ErrorDetail]:
+    # Validar que estado sea PENDING | TEMPORAL_ERROR | RETRYING
+    # Inicializar ProcessingContext tipado
+    # Transicionar estado: PENDING→PROCESSING, TEMPORAL_ERROR→RETRYING
+    # [TX1] uow.events.save(event) + uow.commit()
+    # Retornar Ok(event) o Err(ErrorDetail)
 ```
-# Unit: Lógica aislada con mocks
-def test_use_case_logic(uow_mock):
-    result = await use_case.execute(input)
+
+**Validaciones**:
+
+- `event.state` en [PENDING, TEMPORAL_ERROR, RETRYING]
+- Si no, retornar Err (sin persistir)
+
+**Transiciones**:
+
+- PENDING → PROCESSING
+- TEMPORAL_ERROR → RETRYING
+- RETRYING → RETRYING (sin cambio)
+
+#### Etapa 2: Process with Retries (sin persistencia)
+
+```python
+async def process_with_retries(self, event: Event) -> Result[Event, ErrorDetail]:
+    # Obtener procesador del registry
+    processor = processor_registry.get(event.processor_type, NoOpProcessor())
+
+    # tenacity.AsyncRetrying: max 3 intentos, exponential backoff 0.1-2s
+    # En cada intento: classify_error (TRANSIENT vs PERMANENT)
+    # TRANSIENT: reintenta
+    # PERMANENT: retorna Err inmediatamente (sin persístir)
+
+    # Actualizar event.attempt_count, event.last_activity, event.pending_callback
+    # Retornar Ok(event) o Err (sin persistencia)
+```
+
+**Retry Timeline**:
+
+- Intento 1: 0ms (immediate)
+- Intento 2: 100ms
+- Intento 3: 500ms
+- p95 = 600ms
+
+**Error Classification**:
+
+- PERMANENT (4xx HTTP, ValueError) → Fail immediately
+- TRANSIENT (5xx HTTP, timeouts) → Retry
+
+#### Etapa 3: Persist Outcome (TX2)
+
+```python
+async def persist_outcome(self, event: Event) -> Result[Event, ErrorDetail]:
+    # 4 caminos según evento.resultado:
+
+    # 1. SUCCESS → PROCESSING/RETRYING→COMPLETED
+    if event_success:
+        event.state = EventState.COMPLETED
+
+    # 2. PENDING_CALLBACK → solo guardar context, no cambiar state
+    if event.pending_callback:
+        event.processing_context = {...}
+
+    # 3. FAILED → evento.state = PROCESSING→FAILED
+    if event_failed and event.from_state == PROCESSING:
+        event.state = EventState.FAILED
+
+    # 4. RETRY_EXHAUSTED → evento.state = RETRYING→EXHAUSTED
+    if event.retry_exhausted and event.from_state == RETRYING:
+        event.state = EventState.EXHAUSTED
+
+    # [TX2] uow.events.save(event) + uow.commit()
+    # Retornar Ok(event) o Err
+```
+
+#### Etapa 4: Execute (Orquestación)
+
+```python
+async def execute(self, event_id: UUID) -> Result[ProcessEventResult, ErrorDetail]:
+    # Patrón: Pattern Matching (async-safe, NO and_then)
+
+    # 0. Fetch
+    result = await self.uow.events.getOne(event_id)
+    if isinstance(result, Err):
+        return result
+    event = result.unwrap()
+
+    # 1. Validate & Lock
+    result = await self.validate_and_lock(event)
+    if isinstance(result, Err):
+        return result
+    event = result.unwrap()
+
+    # 2. Process with Retries
+    result = await self.process_with_retries(event)
+    if isinstance(result, Err):
+        return result
+    event = result.unwrap()
+
+    # 3. Persist Outcome
+    result = await self.persist_outcome(event)
+    if isinstance(result, Err):
+        return result
+    event = result.unwrap()
+
+    # 4. Retornar DTO (no entity)
+    return Ok(ProcessEventResult(event=event, ...))
+```
+
+### Step 4: Testing (Unit + Functional según necesidad)
+
+**Estrategia de Testing para ProcessEventIdealUseCase**:
+
+#### Test Unitarios (Mocks de UoW)
+
+```python
+# tests/unit/test_process_event_ideal_validate_lock.py
+@pytest.mark.asyncio
+async def test_pending_transitions_to_processing(uow_mock):
+    """Stage 1: PENDING→PROCESSING con TX1"""
+    event = make_event(state=EventState.PENDING)
+    uow_mock.events.save_or_resolve_one = AsyncMock(return_value=Ok([event]))
+
+    use_case = ProcessEventIdealUseCase(uow=uow_mock)
+    result = await use_case.validate_and_lock(event)
+
+    assert result.is_ok()
+    assert result.unwrap().state == EventState.PROCESSING
+    uow_mock.commit.assert_called_once()
+
+# tests/unit/test_process_event_ideal_process_with_retries.py
+@pytest.mark.asyncio
+async def test_processor_success_returns_event(uow_mock, processor_mock):
+    """Stage 2: Procesador exitoso"""
+    event = make_event(state=EventState.PROCESSING)
+    processor_mock.process = AsyncMock(return_value=Ok({"status": 200}))
+
+    use_case = ProcessEventIdealUseCase(uow=uow_mock, processor_registry={"test": processor_mock})
+    result = await use_case.process_with_retries(event)
+
     assert result.is_ok()
 
-# Functional: End-to-end con BD real
-async def test_use_case_e2e(uow_factory, dbsession):
-    result = await use_case.execute(input)
+# tests/unit/test_process_event_ideal_persist_outcome.py
+@pytest.mark.asyncio
+async def test_success_transitions_to_completed(uow_mock):
+    """Stage 3: SUCCESS→COMPLETED con TX2"""
+    event = make_event(state=EventState.PROCESSING, result_data={"status": 200})
+
+    use_case = ProcessEventIdealUseCase(uow=uow_mock)
+    result = await use_case.persist_outcome(event)
+
     assert result.is_ok()
-    # Verificar DB
+    assert result.unwrap().state == EventState.COMPLETED
+
+# tests/unit/test_process_event_ideal_execute_orchestration.py
+@pytest.mark.asyncio
+async def test_execute_happy_path_pending_to_completed(uow_mock, processor_mock):
+    """Stage 4: Orquestación PENDING→PROCESSING→COMPLETED"""
+    event = make_event(state=EventState.PENDING)
+    uow_mock.events.getOne = AsyncMock(return_value=Ok(event))
+
+    use_case = ProcessEventIdealUseCase(uow=uow_mock, processor_registry={"test": processor_mock})
+    result = await use_case.execute(event.id)
+
+    assert result.is_ok()
+    assert result.unwrap().state == EventState.COMPLETED
+```
+
+**Cobertura de Gaps** (11 tests adicionales para branches no cubiertos):
+
+- `metadata=None` en ProcessingContext
+- `error=None` en exception handling
+- Exception desde etapa RETRYING
+- Errores de save en TX1 y TX2
+- Resultados sin transición
+
+#### Test Funcionales (BD real en memoria)
+
+```python
+# tests/functional/test_process_event_ideal_e2e.py
+@pytest.mark.asyncio
+async def test_happy_path_with_real_db(uow_factory):
+    """E2E: Verificar persistencia en BD real"""
+    async with uow_factory() as uow:
+        # 1. Enqueue evento
+        event = Event(id=uuid4(), name="test", state=EventState.PENDING, ...)
+        uow.events.save(event)
+        await uow.commit()
+
+        # 2. Process
+        use_case = ProcessEventIdealUseCase(uow=uow)
+        result = await use_case.execute(event.id)
+
+        # 3. Verificar BD
+        assert result.is_ok()
+        db_event = await uow.events.getOne(event.id)
+        assert db_event.unwrap().state == EventState.COMPLETED
+```
+
+**Comandos útiles**:
+
+```bash
+# Unit aislado (SRP: cada etapa por separado)
+uv run pytest tests/unit/test_process_event_ideal_validate_lock.py -v
+
+# Todos los tests del módulo neo_event_usecase
+uv run pytest tests/unit/ -k "ideal" -v
+
+# Con cobertura
+uv run pytest tests/unit/ -k "ideal" --cov=app/core/usecases/neo_event_usecase
+
+# Test específico
+uv run pytest tests/unit/test_process_event_ideal_execute_orchestration.py::test_execute_happy_path_pending_to_completed -v
 ```
 
 ### Step 5: Quality Gates (Antes de Commit)
@@ -177,11 +439,11 @@ uv run ruff check --fix . && uv run ruff format .
 # 2. mypy: Type checking (strict mode)
 uv run mypy app
 
-# 3. pytest: Todos los tests deben pasar
+# 3. pytest: Suite completa o por módulo
 uv run pytest
 
 # 4. Commit solo si TODO pasa
-git add -A && git commit -m "..."
+git add -A && git commit -m "feat(usecase): stage1 validate_and_lock + unit tests"
 ```
 
 ---
@@ -1843,15 +2105,16 @@ Si estás implementando una feature:
 
 ## 📝 Document Versioning
 
-| Versión | Fecha      | Cambios                                                                                                                                                                                                                                                                                                                                         |
-| ------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| v3.0    | 2025-12-28 | **PROCESSOR PATTERN COMPLETE (Phases 5-6)**: Added comprehensive Processor Pattern documentation covering 4+ processor types (ApiCall, Grpc, LocalUseCase, NoOp), error classification strategy, async/callback pattern, Message Publisher, DLQ routing, comprehensive testing strategy, and troubleshooting guide. 203 tests, 86.92% coverage. |
-| v2.1    | 2025-12-28 | **Added "Lo que no está, no falla" principle**: Agregado como principio core con sección dedicada, ejemplos prácticos, red flags y métricas de éxito. Incluido en Common Pitfalls y Key Takeaways.                                                                                                                                              |
-| v2.0    | 2025-12-27 | **Complete rewrite**: Reorganizado para ser más práctico y repetible. Added concurrency patterns, simplified commands, added typical workflow example. Agregados principios SOLID explícitamente.                                                                                                                                               |
-| v1.0    | 2024-12-10 | Versión inicial                                                                                                                                                                                                                                                                                                                                 |
+| Versión | Fecha      | Cambios                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v3.1    | 2025-12-28 | **PROCESSEVENIDEALUSECASE COMPLETE (Phases 1-4)**: Refactorized Development Workflow section with comprehensive 4-stage pipeline (fetch→validate_and_lock→process_with_retries→persist_outcome→execute). Added detailed implementation guides for each stage, pattern matching async orchestration (no and_then), 34 unit tests (89% coverage on neo_event_usecase.py), comprehensive test strategy breakdown (validate_lock, process_with_retries, persist_outcome, coverage_gaps, execute_orchestration), quality gates validation (Ruff PASS, mypy PASS strict mode), and troubleshooting guide. |
+| v3.0    | 2025-12-28 | **PROCESSOR PATTERN COMPLETE (Phases 5-6)**: Added comprehensive Processor Pattern documentation covering 4+ processor types (ApiCall, Grpc, LocalUseCase, NoOp), error classification strategy, async/callback pattern, Message Publisher, DLQ routing, comprehensive testing strategy, and troubleshooting guide. 203 tests, 86.92% coverage.                                                                                                                                                                                                                                                     |
+| v2.1    | 2025-12-28 | **Added "Lo que no está, no falla" principle**: Agregado como principio core con sección dedicada, ejemplos prácticos, red flags y métricas de éxito. Incluido en Common Pitfalls y Key Takeaways.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| v2.0    | 2025-12-27 | **Complete rewrite**: Reorganizado para ser más práctico y repetible. Added concurrency patterns, simplified commands, added typical workflow example. Agregados principios SOLID explícitamente.                                                                                                                                                                                                                                                                                                                                                                                                   |
+| v1.0    | 2024-12-10 | Versión inicial                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ---
 
 **Última actualización**: 2025-12-28
-**Status**: ✅ MVP COMPLETE - Processor Pattern fully implemented and tested
-**Next Steps**: Metrics/observability, distributed tracing, gRPC implementation
+**Status**: ✅ PHASE 4 COMPLETE - ProcessEventIdealUseCase fully implemented and tested (89% coverage, Ruff + mypy clean)
+**Next Steps**: Functional testing e2e with real DB, Agents.md integration guide, full suite coverage gate
