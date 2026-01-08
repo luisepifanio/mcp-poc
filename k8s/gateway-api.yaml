@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-api
+  labels:
+    app: gateway-api
+spec:
+  type: ClusterIP
+  ports:
+    - targetPort: 8000
+      port: 80
+  selector:
+    app: gateway-api
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-api-configuration
+  labels:
+    app: gateway-api
+data:
+  ACCESS_TOKEN_EXPIRE_MINUTES: "10"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gateway-api-credentials
+type: Opaque
+data:
+  email: YWRtaW5AYWRtaW4uY29t
+  password: cGFzc3dvcmQ=
+  secret_key: c2VjcmV0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-api
+  labels:
+    app: gateway-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway-api
+  template:
+    metadata:
+      labels:
+        app: gateway-api
+    spec:
+      containers:
+        - name: gateway-api
+          image: gateway-api
+          ports:
+            - containerPort: 8000
+          livenessProbe:
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            httpGet:
+              path: /ping
+              port: 8000
+          env:
+            - name: ENV
+              value: "prod"
+            - name: LOG_LEVEL
+              value: "INFO"
+          envFrom:
+            - configMapRef:
+                name: gateway-api-configuration

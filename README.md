@@ -1,48 +1,232 @@
-# MCP Proof Of Concept
+# MCP POC Monorepo
 
-Just a MCP Proof of Concept using
+[![Kubernetes](https://img.shields.io/badge/kubernetes-ready-326ce5.svg?logo=kubernetes)](https://kubernetes.io/)
+[![Python](https://img.shields.io/badge/python-3.12+-blue.svg?logo=python)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.121+-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Tilt](https://img.shields.io/badge/tilt-dev-00add8.svg)](https://tilt.dev/)
 
-- Ollama,
-- FastapiMCP for MCP over SSE
-- A Simple Agent using exposed tools
+Monorepo multi-servicio con arquitectura de microservicios, Kubernetes, y desarrollo integrado con Tilt.
 
-# Usage
+---
 
-## Tools
+## 🚀 Quick Start
 
-- [Install UV](https://docs.astral.sh/uv/getting-started/installation/). Package manager
+```bash
+# 1. Verificar pre-requisitos
+docker --version && kubectl version --client && uv --version && tilt version
 
-```shell
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-- Use [Direnv](https://direnv.net/docs/installation.html) for your environment vars
-```shell
-# On mac
-brew install direnv
-```
-- Uses [Docker](https://docs.docker.com/desktop/). 
+# 2. Levantar toda la infraestructura
+tilt up
 
-## How to run
-
-1. Start your mcp server
-```shell 
- docker-compose up --build
+# 3. Probar que funcione
+curl http://localhost/api/ping
+# Respuesta esperada: "pong"
 ```
 
-2. Run your local agent
+**Listo!** Tilt UI se abrirá en http://localhost:10350
 
-```shell
-cd mcpagent
-# Just first time
-uv sync
-# Run Agent
-uv run agent_runner.py
+---
+
+## 📖 Documentación
+
+### Para empezar:
+- **[📘 Agents.md](Agents.md)** - Guía principal del monorepo (START HERE)
+- **[🔧 Setup Guide](docs/SETUP.md)** - Instalación paso a paso
+- **[🏗️ Architecture](docs/ARCHITECTURE.md)** - Visión arquitectónica
+- **[🚀 Deployment](docs/DEPLOYMENT.md)** - Estrategias de deployment
+- **[📊 Resumen Infra](docs/INFRASTRUCTURE_SETUP_SUMMARY.md)** - Cambios recientes
+
+### Documentación por proyecto:
+- **[Gateway API](gateway-api/Agents.md)** - API Gateway (FastAPI)
+- **[MCP Server](mcpserver/Agents.md)** - Backend de procesamiento
+- **[MCP Agent](mcpagent/README.md)** - Agentes y tooling
+
+---
+
+## 🏗️ Estructura
+
+```
+mcp-poc/
+├── gateway-api/      # 🌐 API Gateway (FastAPI + Clean Architecture)
+├── mcpserver/        # 🔧 Backend de procesamiento (FastAPI + SQLAlchemy)
+├── mcpagent/         # 🤖 Agentes y herramientas
+├── k8s/              # ☸️  Manifiestos de Kubernetes
+├── docs/             # 📚 Documentación global
+├── scripts/          # 🔨 Scripts de automatización
+├── Tiltfile          # 🎯 Orquestación de desarrollo
+└── Agents.md         # 📘 Guía principal
 ```
 
-3. Sgut down your mcp demo server
-```shell 
- docker-compose down
+---
+
+## 🛠️ Stack Tecnológico
+
+| Capa            | Tecnología             |
+| --------------- | ---------------------- |
+| **Lenguaje**    | Python 3.12+           |
+| **Framework**   | FastAPI + Uvicorn      |
+| **ORM**         | SQLAlchemy + SQLModel  |
+| **Orquestación**| Kubernetes + Tilt      |
+| **Routing**     | NGINX Ingress          |
+| **Containers**  | Docker + uv            |
+| **Testing**     | pytest                 |
+| **Linting**     | Ruff + mypy            |
+
+---
+
+## 🎯 Workflows de Desarrollo
+
+### Desarrollo con Tilt (Recomendado)
+
+```bash
+# Levantar toda la infra
+tilt up
+
+# Editar código → Auto-rebuild en Tilt
+# Ver logs en tiempo real en Tilt UI: http://localhost:10350
+
+# Detener
+tilt down
 ```
+
+### Desarrollo de un Servicio Aislado
+
+```bash
+cd gateway-api
+uv sync --group dev
+uv run fastapi dev  # Hot-reload local sin k8s
+```
+
+### Testing
+
+```bash
+cd gateway-api
+uv run pytest                # Todos los tests
+uv run pytest tests/unit     # Solo unitarios
+uv run pytest -v --cov       # Con coverage
+```
+
+### Linting
+
+```bash
+cd gateway-api
+uv run ruff check .          # Lint
+uv run ruff format .         # Format
+uv run mypy app              # Type checking
+```
+
+---
+
+## 🌐 Endpoints Disponibles
+
+| URL                                  | Descripción    | Servicio    |
+| ------------------------------------ | -------------- | ----------- |
+| `http://localhost/api/ping`          | Health check   | gateway-api |
+| `http://localhost:10350`             | Tilt UI        | -           |
+| `http://localhost:8000` (port-fwd)   | Gateway API    | gateway-api |
+
+---
+
+## 🧪 Verificación del Setup
+
+```bash
+# 1. Ver pods corriendo
+kubectl get pods
+
+# 2. Ver ingress controller
+kubectl get pods -n ingress-nginx
+
+# 3. Probar endpoint
+curl http://localhost/api/ping
+
+# 4. Ver logs
+kubectl logs -l app=gateway-api --tail=50 -f
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### "curl localhost/api/ping no funciona"
+
+```bash
+# Verificar NGINX Ingress Controller
+kubectl get pods -n ingress-nginx
+
+# Si no existe, instalar:
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.0/deploy/static/provider/cloud/deploy.yaml
+```
+
+### "Pod en CrashLoopBackOff"
+
+```bash
+# Ver logs del pod
+kubectl logs -l app=gateway-api --tail=100
+
+# Describir pod
+kubectl describe pod -l app=gateway-api
+```
+
+### Más troubleshooting
+
+Ver [docs/SETUP.md](docs/SETUP.md#troubleshooting)
+
+---
+
+## 📦 Requisitos del Sistema
+
+### Software
+
+- **Docker Desktop** con Kubernetes habilitado
+- **Python 3.12+**
+- **uv** (package manager): `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **Tilt**: `curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash`
+- **kubectl** (incluido con Docker Desktop)
+
+### Hardware Recomendado
+
+- **RAM**: 8GB mínimo, 16GB recomendado
+- **Disco**: 20GB libres
+- **CPU**: 4 cores recomendado
+
+---
+
+## 🤝 Contribución
+
+1. **Leer documentación del proyecto**: Ver `gateway-api/Agents.md` o `mcpserver/Agents.md`
+2. **Crear feature branch**: `git checkout -b feature/mi-feature`
+3. **Desarrollar con tests**: TDD preferido
+4. **Validar con Tilt**: `tilt up` para probar integración
+5. **PR con tests y linting pasando**
+
+---
+
+## 📝 Principios del Monorepo
+
+1. **Independencia**: Cada proyecto tiene su `pyproject.toml` y venv
+2. **Clean Architecture**: 3 capas en todos los proyectos Python
+3. **Type Safety**: mypy strict mode obligatorio
+4. **Testing First**: Cobertura mínima 75%
+5. **Documentación distribuida**: `Agents.md` global + específicos
+
+---
+
+## 📞 Recursos
+
+- **Tilt Docs**: https://docs.tilt.dev/
+- **Kubernetes Docs**: https://kubernetes.io/docs/
+- **FastAPI Docs**: https://fastapi.tiangolo.com/
+- **Clean Architecture**: https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html
+
+---
+
+## 📄 Licencia
+
+[Especificar licencia]
+
+---
+
+**¿Primera vez en el proyecto?** → Lee [Agents.md](Agents.md) para la guía completa.
 
 
  
