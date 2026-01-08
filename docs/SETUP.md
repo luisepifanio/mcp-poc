@@ -356,6 +356,35 @@ kubectl describe ingress gateway-ingress
    kubectl get svc gateway-api
    ```
 
+### app-local.hades.ar no resuelve
+
+**Síntoma**: `curl: (6) Could not resolve host: app-local.hades.ar`
+
+**Causa**: DNS cache no actualizado después de modificar `/etc/hosts`
+
+**Solución**:
+```bash
+# macOS
+sudo dscacheutil -flushcache
+sudo killall -HUP mDNSResponder
+
+# Linux (systemd-resolved)
+sudo systemd-resolve --flush-caches
+
+# Linux (NetworkManager)
+sudo systemctl restart NetworkManager
+
+# Verificar
+curl http://app-local.hades.ar/api/ping
+```
+
+**Alternativa rápida** (sin flush):
+```bash
+curl --resolve app-local.hades.ar:80:127.0.0.1 http://app-local.hades.ar/api/ping
+```
+
+**Nota**: El script `./scripts/setup-local-hosts.sh` hace el flush automáticamente.
+
 ### "Permission denied" al ejecutar scripts
 
 ```bash

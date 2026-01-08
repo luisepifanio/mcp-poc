@@ -146,6 +146,24 @@ else
     warn "Verifica que Tilt esté corriendo: tilt up"
 fi
 
+# Verificar dominio local si existe
+if grep -q "app-local.hades.ar" /etc/hosts 2>/dev/null; then
+    check "/etc/hosts tiene app-local.hades.ar configurado"
+    
+    RESPONSE_LOCAL=$(curl -s -o /dev/null -w "%{http_code}" http://app-local.hades.ar/api/ping 2>/dev/null || echo "000")
+    if [ "$RESPONSE_LOCAL" == "200" ]; then
+        check "http://app-local.hades.ar/api/ping responde 200"
+    else
+        warn "http://app-local.hades.ar/api/ping responde $RESPONSE_LOCAL"
+        warn "Intenta refrescar DNS cache:"
+        warn "  macOS:  sudo dscacheutil -flushcache"
+        warn "  Linux:  sudo systemd-resolve --flush-caches"
+    fi
+else
+    warn "/etc/hosts no tiene app-local.hades.ar configurado (opcional)"
+    warn "Ejecuta: sudo ./scripts/setup-local-hosts.sh"
+fi
+
 echo ""
 
 # 7. Tilt

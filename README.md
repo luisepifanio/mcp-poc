@@ -15,12 +15,18 @@ Monorepo multi-servicio con arquitectura de microservicios, Kubernetes, y desarr
 # 1. Verificar pre-requisitos
 docker --version && kubectl version --client && uv --version && tilt version
 
-# 2. Levantar toda la infraestructura
+# 2. (Opcional) Configurar dominio local
+sudo ./scripts/setup-local-hosts.sh
+
+# 3. Levantar toda la infraestructura
 tilt up
 
-# 3. Probar que funcione
+# 4. Probar que funcione
 curl http://localhost/api/ping
 # Respuesta esperada: "pong"
+
+# Con dominio local configurado:
+curl http://app-local.hades.ar/api/ping
 ```
 
 **Listo!** Tilt UI se abrirá en http://localhost:10350
@@ -122,6 +128,7 @@ uv run mypy app              # Type checking
 | URL                                  | Descripción    | Servicio    |
 | ------------------------------------ | -------------- | ----------- |
 | `http://localhost/api/ping`          | Health check   | gateway-api |
+| `http://app-local.hades.ar/api/ping` | Health check   | gateway-api |
 | `http://localhost:10350`             | Tilt UI        | -           |
 | `http://localhost:8000` (port-fwd)   | Gateway API    | gateway-api |
 

@@ -56,18 +56,22 @@ kubectl get nodes
 git clone <repo-url>
 cd mcp-poc
 
-# 2. Levantar toda la infraestructura con Tilt
+# 2. (Opcional) Configurar dominio local
+sudo ./scripts/setup-local-hosts.sh
+# Esto configura app-local.hades.ar y refresca DNS cache
+
+# 3. Levantar toda la infraestructura con Tilt
 tilt up
 
-# 3. Abrir Tilt UI en el navegador (se abre automáticamente)
+# 4. Abrir Tilt UI en el navegador (se abre automáticamente)
 # URL: http://localhost:10350
 
-# 4. Verificar que todo funcione
+# 5. Verificar que todo funcione
 curl http://localhost/api/ping
 # Debería responder: "pong"
 
-# Nota: Docker Desktop en macOS no resuelve dominios personalizados de /etc/hosts
-# Usar siempre localhost o 127.0.0.1 para desarrollo local
+# Si configuraste el dominio local:
+curl http://app-local.hades.ar/api/ping
 ```
 
 ### Detener el Entorno
@@ -252,9 +256,10 @@ graph TD
 
 ### Endpoints Disponibles
 
-| Endpoint                    | Descripción  | Requiere Auth |
-| --------------------------- | ------------ | ------------- |
-| `http://localhost/api/ping` | Health check | No            |
+| Endpoint                             | Descripción          | Requiere Auth |
+| ------------------------------------ | -------------------- | ------------- |
+| `http://localhost/api/ping`          | Health check         | No            |
+| `http://app-local.hades.ar/api/ping` | Health check (alias) | No            |
 
 ---
 
@@ -330,22 +335,31 @@ kubectl describe pod -l app=gateway-api
 
 ### "No puedo acceder a app-local.hades.ar"
 
-**Causa**: Docker Desktop en macOS no resuelve correctamente `/etc/hosts` del sistema host.
+**Causa**: DNS cache no actualizado después de modificar `/etc/hosts`.
 
-**Solución**: Usar `localhost` o `127.0.0.1` en su lugar:
+**Solución**: Refrescar el DNS cache del sistema:
+
 ```bash
-# ✅ Funciona con Docker Desktop
-curl http://localhost/api/ping
-curl http://127.0.0.1/api/ping
+# macOS
+sudo dscacheutil -flushcache
+sudo killall -HUP mDNSResponder
 
-# ❌ NO funciona con Docker Desktop (limitación conocida)
+# Linux (systemd-resolved)
+sudo systemd-resolve --flush-caches
+
+# Linux (NetworkManager)
+sudo systemctl restart NetworkManager
+
+# Verificar
 curl http://app-local.hades.ar/api/ping
+```
 
-# Alternativa: forzar resolución DNS
+**Alternativa rápida**: Forzar resolución DNS sin flush:
+```bash
 curl --resolve app-local.hades.ar:80:127.0.0.1 http://app-local.hades.ar/api/ping
 ```
 
-**Nota**: Dominios personalizados funcionan correctamente en clusters externos (minikube, k3s, GKE).
+**Nota**: El script `./scripts/setup-local-hosts.sh` hace el flush automáticamente.
 
 ---
 

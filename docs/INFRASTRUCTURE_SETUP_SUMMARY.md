@@ -155,18 +155,9 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: localhost
-      http:
-        paths:
-          - path: /api(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: gateway-api
-                port:
-                  number: 80
-    - host: app-local.hades.ar
-      http:
+    # Sin host específico - acepta cualquier host
+    # Simplifica configuración y funciona con localhost, IPs y dominios custom
+    - http:
         paths:
           - path: /api(/|$)(.*)
             pathType: ImplementationSpecific
@@ -389,7 +380,7 @@ kubectl wait --namespace ingress-nginx \
 
 - [x] NGINX Ingress Controller se instala automáticamente
 - [x] `curl http://localhost/api/ping` responde "pong"
-- [x] `curl http://app-local.hades.ar/api/ping` responde "pong" (con hosts configurado)
+- [x] `curl http://app-local.hades.ar/api/ping` responde "pong" (requiere DNS flush después de setup)
 - [x] Tilt UI muestra todos los recursos en verde
 - [x] Hot reload funciona (cambiar código → auto-rebuild)
 - [x] Logs visibles en Tilt UI
@@ -397,6 +388,7 @@ kubectl wait --namespace ingress-nginx \
 - [x] Ingress usa `ingressClassName: nginx`
 - [x] Path rewriting funcional (`/api/ping` → `/ping`)
 - [x] Documentación global creada y organizada
+- [x] Script de configuración de hosts incluye DNS flush automático
 
 ---
 

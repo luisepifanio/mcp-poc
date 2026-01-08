@@ -12,9 +12,8 @@ Este documento describe visualmente la arquitectura de networking implementada e
 │                                                               │
 │  curl http://localhost/api/ping                               │
 │  curl http://127.0.0.1/api/ping                               │
-│                                                               │
-│  Nota: Docker Desktop NO resuelve dominios de /etc/hosts      │
-└───────────────────────┬──────────────────────────────────────┘
+│  curl http://app-local.hades.ar/api/ping                      │
+└───────────────────────────┬───────────────────────────────────┘
                         │
                         │ HTTP Request
                         │ Port 80
@@ -150,7 +149,7 @@ spec:
   ingressClassName: nginx
   rules:
     # Sin host específico - acepta cualquier host
-    # Solución para Docker Desktop que no resuelve /etc/hosts
+    # Simplifica configuración y funciona con localhost, IPs y dominios custom
     - http:
         paths:
           - path: /api(/|$)(.*)
@@ -165,8 +164,8 @@ spec:
 **Función**:
 - Define reglas de routing
 - Path rewriting: `/api/ping` → `/ping`
-- Sin restricción de host (acepta localhost, 127.0.0.1, cualquier IP)
-- Solución para Docker Desktop que no resuelve `/etc/hosts`
+- Sin restricción de host (acepta localhost, 127.0.0.1, app-local.hades.ar, etc)
+- Simplifica testing con múltiples formas de acceso
 
 **Verificar**:
 ```bash
