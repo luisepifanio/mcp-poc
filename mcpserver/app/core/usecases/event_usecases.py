@@ -37,6 +37,15 @@ class EnqueuedEventUseCaseOutput(BaseModel):
 
 
 def transition_event(event: Event, new_state: EventState) -> Result[Event, ErrorDetail]:
+    """_summary_
+       IMPORTANT: This function mutates the event in place.
+    Args:
+        event (Event): _description_
+        new_state (EventState): _description_
+
+    Returns:
+        Result[Event, ErrorDetail]: _description_
+    """
     VALID_TRANSITIONS = {
         EventState.CREATED: [EventState.PENDING, EventState.FAILED],
         EventState.PENDING: [EventState.PROCESSING],  # IMPORTANT! Just one transition

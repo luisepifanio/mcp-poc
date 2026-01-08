@@ -49,6 +49,14 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             list_of_events: list[Event] = []
 
             for event in events:
+                # If the event instance is not attached to this session, merge it
+                try:
+                    if not self.session.object_session(event):
+                        event = await self.session.merge(event)
+                except Exception:
+                    # If merge fails for any reason, fall back to adding the original
+                    pass
+
                 self.session.add(event)
                 await self.session.flush()
 

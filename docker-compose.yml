@@ -6,7 +6,9 @@ services:
       - "6379:6379"
     volumes:
       - ./var/lib/redis/data:/data
-    profiles: ["infra"]
+    profiles:
+      - infra
+      - app
     command: redis-server --save 60 1 --loglevel warning --appendonly yes
     networks:
       - mcpnet
@@ -27,7 +29,9 @@ services:
       - REDIS_HOSTS=local:redis:6379
     ports:
       - "9081:8081" # Access the GUI at http://localhost:9081
-    profiles: ["infra"]
+    profiles:
+      - debug
+      - infra
     networks:
       - mcpnet
   mcp-server:
@@ -43,11 +47,37 @@ services:
       - ./mcpserver/var/lib/database.sqlite:/app/var/lib/database.sqlite
     networks:
       - mcpnet
+    profiles:
+      - infra
+      - app
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+  gateway-api:
+    build: gateway-api
+    ports:
+      - "${GATEWAY_API_PORT:-4000}:8000"
+    environment:
+      - ENV=${ENV:-local} # Valor por defecto: "local"
+      - LOG_LEVEL=${LOG_LEVEL:-INFO} # Valor por defecto: "INFO"
+    volumes:
+      - ./docs:/app/docs
+    networks:
+      - mcpnet
+    profiles:
+      - infra
+      - app
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/ping"] # Wrong on purpose until defined on the gateway-api
       interval: 10s
       timeout: 30s
       retries: 5

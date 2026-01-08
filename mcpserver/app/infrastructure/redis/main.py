@@ -18,13 +18,12 @@ from tenacity import (
 )
 
 from app.core.processor_registry import processor_registry
-from app.core.processors import ErrorType
 from app.core.usecases.event_usecases import (
     EnqueuedEventUseCaseInput,
     EnqueuedEventUseCaseOutput,
     EnqueueEventUseCase,
-    ProcessEventUseCase,
 )
+from app.core.usecases.process_event_usecase import ProcessEventUseCase2
 
 from ...core.settings import getAppSettings
 from ..db.connection import get_session
@@ -191,30 +190,31 @@ ProcessingEventSubscriber: Callable[
 
 
 @ProcessingEventSubscriber
-@broker.publisher(stream="result-event-subject")  # <-- listen here for results
+@broker.publisher(stream="result-event-subject")
 async def handle_processing_event_queue(
     body: EnqueuedEventUseCaseOutput,
     msg: RedisMessage,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any] | None:
     """
-    Handle event processing with processor pattern.
+    Handle event processing orchestration with retry strategy.
 
     Flow:
-    1. Get processor from registry (may be NoOpProcessor if not registered)
-    2. Execute processor.process(event) with retry strategy based on error classification
-    3. Handle result: SUCCESS → COMPLETED, PENDING_CALLBACK → PROCESSING
-    4. On error: classify via processor.classify_error()
-       - PERMANENT → FAILED (no retry)
-       - TRANSIENT → TEMPORAL_ERROR (mark for retry)
-       - RATE_LIMIT → TEMPORAL_ERROR (with longer backoff)
-    5. Persist state transitions via ProcessEventUseCase
+    1. Load event from DB
+    2. Instantiate ProcessEventUseCase2 with dependencies (UoW, ProcessorRegistry)
+    3. Execute with retry strategy (tenacity - exponential backoff)
+       - Retries on transient errors
+       - Classifies errors via processor.classify_error()
+    4. Adapt output to response
+    5. Acknowledge/nack message based on result
+
+    Retry logic is encapsulated in infrastructure with tenacity.
+    UseCase handles state transitions and processor invocation.
     """
     try:
         logger.info(f"Processing event: {body.id} (name={body.name})")
 
         async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
-            # Fetch the actual Event entity from DB
             event_result = await uow.events.getOne(body.id)
             if event_result.is_err():
                 logger.error(f"Event {body.id} not found in DB")
@@ -223,106 +223,57 @@ async def handle_processing_event_queue(
 
             event = event_result.unwrap()
 
-            # Get processor from registry (NoOpProcessor if not registered)
-            processor = processor_registry.get(event.name)
+            # ProcessEventUseCase2 encapsulates retry logic (CORE business logic)
+            usecase = ProcessEventUseCase2(uow, processor_registry)
+            result = await usecase.execute(event)
 
-            # Execute processor with retry strategy
-            max_attempts = processor.get_retry_config().max_attempts
-            initial_backoff = processor.get_retry_config().initial_backoff
-            max_backoff = processor.get_retry_config().max_backoff
-
-            result = None
-            last_error: BaseException | None = None
-
-            try:
-                async for attempt in AsyncRetrying(
-                    stop=stop_after_attempt(max_attempts),
-                    wait=wait_exponential(
-                        multiplier=processor.get_retry_config().backoff_multiplier,
-                        min=initial_backoff,
-                        max=max_backoff,
-                    ),
-                    before_sleep=before_sleep_log(logger, logging.WARNING),
-                    after=after_log(logger, logging.INFO),
-                    reraise=True,
-                ):
-                    with attempt:
-                        result = await processor.process(event)
-            except RetryError as retry_err:
-                last_error = retry_err.last_attempt.exception()
-            except Exception as exc:
-                last_error = exc
-
-            # Process result or error
-            usecase = ProcessEventUseCase(uow)
-
-            if result and result.status.value == "success":
-                # Processor succeeded
-                logger.info(f"Event {event.id} processed successfully")
-                await usecase.execute(
-                    event,
-                    result_data=result.data,
-                    processing_metadata={"processor": processor.__class__.__name__},
-                )
-            elif result and result.status.value == "pending_callback":
-                # Processor published async task, waiting for callback
+            # Handle result
+            if result.is_ok():
+                processed_event = result.unwrap()
                 logger.info(
-                    f"Event {event.id} transitioned to PROCESSING (awaiting callback)"
+                    f"Event {body.id} processed successfully: state={processed_event.state}"
                 )
-                await usecase.execute(
-                    event,
-                    processing_metadata={
-                        "processor": processor.__class__.__name__,
-                        "callback_subject": result.callback_subject,
-                        "task_subject": result.metadata.get("task_subject"),
-                    },
-                )
-            elif last_error:
-                # Processor failed - classify error
-                error_type = processor.classify_error(last_error)
-
-                if error_type == ErrorType.PERMANENT:
-                    logger.error(f"Event {event.id} failed (PERMANENT): {last_error}")
-                    await usecase.execute(
-                        event,
-                        error=str(last_error),
-                        processing_metadata={
-                            "processor": processor.__class__.__name__,
-                            "error_type": error_type.value,
-                        },
-                        is_failed=True,
-                    )
-                else:
-                    # TRANSIENT or RATE_LIMIT
-                    logger.warning(
-                        f"Event {event.id} transient error ({error_type.value}): {last_error}"
-                    )
-                    await usecase.execute(
-                        event,
-                        error=str(last_error),
-                        processing_metadata={
-                            "processor": processor.__class__.__name__,
-                            "error_type": error_type.value,
-                        },
-                        is_temporal_error=True,
-                    )
+                await msg.ack()
+                return {
+                    "event_id": str(body.id),
+                    "status": "success",
+                    "state": processed_event.state.value,
+                }
             else:
-                logger.error(
-                    f"Event {event.id}: Unknown result state. Result={result}, Error={last_error}"
+                error = result.unwrap_err()
+                logger.error(f"Event {body.id} processing failed: {error.detail}")
+                await msg.ack()
+                return {
+                    "event_id": str(body.id),
+                    "status": "error",
+                    "error": error.detail,
+                }
+                logger.info(
+                    f"Event {body.id} processed successfully: {processed_event.state}"
                 )
-                await usecase.execute(
-                    event,
-                    error="Unknown processing result",
-                    processing_metadata={
-                        "processor": processor.__class__.__name__,
-                    },
-                    is_failed=True,
-                )
+                await msg.ack()
+                return {
+                    "event_id": str(processed_event.id),
+                    "state": processed_event.state.value,
+                }
 
-            await msg.ack()
-            return {"event_id": str(event.id), "processed": True}
+            if result and result.is_err():
+                error_detail = result.unwrap_err()
+                logger.error(f"Event {body.id} processing failed: {error_detail.detail}")
+                await msg.ack()
+                return {
+                    "event_id": str(body.id),
+                    "error": error_detail.detail,
+                }
+
+            logger.error(f"Event {body.id}: Unknown result state")
+            await msg.nack()
+            return None
 
     except Exception as e:
-        logger.error(f"Unexpected error processing event {body.id}: {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error processing event {body.id}: {e}",
+            exc_info=True,
+        )
         await msg.nack()
         return None

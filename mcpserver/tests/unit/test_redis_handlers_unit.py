@@ -65,9 +65,18 @@ async def test_subscriber_demo_ack_on_exception() -> None:
 
 @pytest.mark.asyncio
 async def test_handle_processing_event_queue_ack_on_success() -> None:
-    """Test that ack is called on successful processing."""
-    from unittest.mock import AsyncMock, MagicMock, patch
+    """Test that ack is called on successful processing.
 
+    NOTE: This is a simplified unit test that mocks dependencies.
+    For full integration testing, see functional tests.
+    """
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from uuid import uuid4
+
+    from result import Ok
+
+    from app.core.entities import Event, EventState
+    from app.core.usecases.event_usecases import EnqueuedEventUseCaseOutput
     from app.infrastructure.redis.main import handle_processing_event_queue
 
     msg = MagicMock()
@@ -76,38 +85,28 @@ async def test_handle_processing_event_queue_ack_on_success() -> None:
 
     session_mock = AsyncMock()
 
-    # Mock the entire UnitOfWork context and processor pipeline
+    test_event = Event(
+        id=uuid4(),
+        name="test_event",
+        state=EventState.PENDING,
+        payload={"test": "data"},
+    )
+
     with patch(
         "app.infrastructure.redis.main.AsyncSQLAlchemyUnitOfWork"
     ) as uow_mock_class:
         uow_mock = AsyncMock()
         uow_mock.__aenter__.return_value = uow_mock
         uow_mock.__aexit__.return_value = None
-
-        from uuid import uuid4
-
-        from app.core.entities import Event, EventState
-
-        test_event = Event(
-            id=uuid4(),
-            name="test_event",
-            state=EventState.PENDING,
-            payload={"test": "data"},
-        )
-
-        # Mock getOne() to return Result[Event, ErrorDetail]
-        from result import Ok
-
         uow_mock.events.getOne = AsyncMock(return_value=Ok(test_event))
 
-        # Mock processor
         with patch("app.infrastructure.redis.main.processor_registry") as registry_mock:
             processor_mock = MagicMock()
             processor_mock.get_retry_config.return_value = MagicMock(
-                max_attempts=3,
-                initial_backoff=0.1,
-                max_backoff=1.0,
-                backoff_multiplier=2.0,
+                max_attempts=1,
+                initial_backoff=0.0,
+                max_backoff=0.0,
+                backoff_multiplier=1.0,
             )
             processor_mock.process = AsyncMock(
                 return_value=MagicMock(
@@ -116,19 +115,22 @@ async def test_handle_processing_event_queue_ack_on_success() -> None:
             )
             registry_mock.get.return_value = processor_mock
 
-            # Mock ProcessEventUseCase
             with patch(
-                "app.infrastructure.redis.main.ProcessEventUseCase"
+                "app.infrastructure.redis.main.ProcessEventUseCase2"
             ) as usecase_mock_class:
                 usecase_mock = MagicMock()
-                usecase_mock.execute = AsyncMock()
-                usecase_mock_class.return_value = usecase_mock
-
-                uow_mock_class.return_value = uow_mock
-
-                from app.core.usecases.event_usecases import (
-                    EnqueuedEventUseCaseOutput,
+                usecase_mock.execute = AsyncMock(
+                    return_value=Ok(
+                        EnqueuedEventUseCaseOutput(
+                            id=test_event.id,
+                            name="test_event",
+                            payload=test_event.payload,
+                            state=EventState.COMPLETED,
+                        )
+                    )
                 )
+                usecase_mock_class.return_value = usecase_mock
+                uow_mock_class.return_value = uow_mock
 
                 body = EnqueuedEventUseCaseOutput(
                     id=test_event.id,
