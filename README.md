@@ -49,6 +49,19 @@ curl http://app-local.hades.ar/api/ping
 
 ---
 
+## 📝 Convenciones de Documentación
+
+- Diagramas en Mermaid: Todos los diagramas deben expresarse utilizando Mermaid (obligatorio). Motivo: es texto estructurado, versionable y fácil de revisar en PRs.
+
+Ejemplo mínimo:
+
+```mermaid
+graph TD
+	A[Cliente] --> B[Servicio]
+```
+
+---
+
 ## 🏗️ Estructura
 
 ```
@@ -160,8 +173,8 @@ kubectl logs -l app=gateway-api --tail=50 -f
 # Verificar NGINX Ingress Controller
 kubectl get pods -n ingress-nginx
 
-# Si no existe, instalar:
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.0/deploy/static/provider/cloud/deploy.yaml
+# Si no existe, instalar (Docker Desktop con KIND):
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.14.1/deploy/static/provider/kind/deploy.yaml
 ```
 
 ### "Pod en CrashLoopBackOff"

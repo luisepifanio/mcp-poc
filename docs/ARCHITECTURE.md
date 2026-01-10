@@ -24,7 +24,8 @@ Esta guía describe la arquitectura general del monorepo y los principios de dis
 | **Lenguaje**    | Python 3.12+           | Runtime principal                  |
 | **Web**         | FastAPI + Uvicorn      | API REST framework                 |
 | **Orquestación**| Kubernetes + Tilt      | Container orchestration + dev loop |
-| **Routing**     | NGINX Ingress          | L7 load balancing                  |
+| **Routing**     | NGINX Ingress v1.14.1  | L7 load balancing                  |
+| **Streaming**   | Redis Streams 8.4      | Event queueing + pub/sub           |
 | **Build**       | Docker + uv            | Containerization + deps            |
 | **Testing**     | pytest                 | Unit + functional tests            |
 | **Linting**     | Ruff + mypy            | Code quality + type safety         |
@@ -39,24 +40,31 @@ graph TB
     Ingress -->|/mcp/* futuro| MCP[MCP Server Service]
     
     GW -->|Internal Network| MCP
+    GW -->|Event Streaming| Redis[Redis Stream Service]
     
     GW --> GW_Pod[Gateway API Pod]
     MCP --> MCP_Pod[MCP Server Pod]
+    Redis --> Redis_Pod[Redis Stream Pod]
     
     GW_Pod -->|ConfigMap| GW_Config[gateway-api-configuration]
     GW_Pod -->|Secret| GW_Secret[gateway-api-credentials]
+    GW_Pod -->|Reads REDIS_HOST/PORT| Redis_Config[redis-stream-configuration]
     
     MCP_Pod -->|ConfigMap| MCP_Config[mcpserver-configuration]
     MCP_Pod -->|Database| DB[(PostgreSQL/SQLite)]
-    MCP_Pod -->|Cache futuro| Redis[(Redis)]
+    MCP_Pod -->|Event Streaming futuro| Redis
+    
+    Redis_Pod -->|PersistentVolume| Redis_PVC[redis-stream-pvc]
     
     style Ingress fill:#326ce5,color:#fff
     style GW fill:#00d1b2,color:#fff
     style MCP fill:#00d1b2,color:#fff
+    style Redis fill:#00d1b2,color:#fff
     style GW_Pod fill:#48c774,color:#fff
     style MCP_Pod fill:#48c774,color:#fff
+    style Redis_Pod fill:#48c774,color:#fff
     style DB fill:#ffdd57,color:#000
-    style Redis fill:#dc3545,color:#fff
+    style Redis_PVC fill:#ff6b6b,color:#fff
 ```
 
 **Leyenda**:
@@ -64,7 +72,7 @@ graph TB
 - **Verde claro**: Services (abstracción k8s)
 - **Verde**: Pods (contenedores aplicación)
 - **Amarillo**: Base de datos
-- **Rojo**: Caché (futuro)
+- **Rojo**: Almacenamiento persistente
 
 ---
 
@@ -80,6 +88,7 @@ graph TB
 - Rate limiting y throttling
 - Request validation
 - Response transformation
+- Encolado de eventos en Redis Stream
 
 **Endpoints**:
 - `GET /api/ping` - Health check
@@ -90,9 +99,11 @@ graph TB
 - FastAPI + Uvicorn
 - Clean Architecture (3 capas)
 - Type safety con mypy strict
+- Redis client (redis-py)
 
 **Dependencias**:
 - NGINX Ingress (upstream)
+- Redis Stream (event queueing) - **ACTUAL**
 - MCP Server (downstream, futuro)
 
 ---
@@ -100,7 +111,7 @@ graph TB
 #### 2. MCP Server
 
 **Responsabilidades**:
-- Procesamiento de eventos
+- Procesamiento de eventos desde Redis Stream
 - Web scraping con Scrapy/Playwright
 - Lógica de negocio core
 - Persistencia de datos
@@ -115,16 +126,82 @@ graph TB
 - SQLAlchemy + SQLModel
 - Scrapy + Playwright
 - Clean Architecture (3 capas)
+- Redis client (redis-py)
 
 **Dependencias**:
 - PostgreSQL/SQLite (datos)
-- Redis (futuro, para colas)
+- Redis Stream (event consumer) - **PLANIFICADO**
+
+---
+
+#### 3. Redis Stream
+
+**Responsabilidades**:
+- Event streaming y pub/sub
+- Cola de mensajes asíncrona
+- Buffer de eventos entre servicios
+- Persistencia temporal de eventos
+
+**Tipo**: Infraestructura (no es un microservicio de aplicación)
+
+**Configuración**:
+```yaml
+# Service
+name: redis-stream
+port: 6379
+
+# Storage
+PersistentVolumeClaim: 1Gi
+
+# Image
+redis:8.4-alpine
+```
+
+**Uso Actual**:
+- Gateway API lee configuración de Redis via ConfigMap:
+  ```yaml
+  env:
+    - name: REDIS_HOST
+      valueFrom:
+        configMapKeyRef:
+          name: redis-stream-configuration
+          key: REDIS_HOST
+    - name: REDIS_PORT
+      valueFrom:
+        configMapKeyRef:
+          name: redis-stream-configuration
+          key: REDIS_PORT
+  ```
+
+**Uso Futuro**:
+- MCP Server consumirá eventos desde Redis Stream
+- Implementar retry logic con Redis Streams
+- Dead letter queue para eventos fallidos
+
+**Acceso**:
+- Interno: `redis-stream.default.svc.cluster.local:6379`
+- CLI: `kubectl exec -it deployment/redis-stream -- redis-cli`
+
+**Comandos útiles**:
+```bash
+# Ver estado
+kubectl get pods -l app=redis-stream
+kubectl logs -l app=redis-stream
+
+# Conectarse
+kubectl exec -it deployment/redis-stream -- redis-cli
+
+# En redis-cli:
+> PING
+> INFO stats
+> XINFO STREAM events-stream
+```
 
 ---
 
 ### Servicios Futuros
 
-#### 3. Notification Service (Planeado)
+#### 4. Notification Service (Planeado)
 
 **Responsabilidades**:
 - Envío de emails
@@ -133,7 +210,7 @@ graph TB
 
 ---
 
-#### 4. Analytics Service (Planeado)
+#### 5. Analytics Service (Planeado)
 
 **Responsabilidades**:
 - Métricas de uso
@@ -155,6 +232,13 @@ External Traffic (Port 80/443)
         ├─→ /api/*      → gateway-api:80 → Pod:8000
         ├─→ /mcp/*      → mcpserver:80    → Pod:8000 (futuro)
         └─→ /analytics/* → analytics:80   → Pod:8000 (futuro)
+
+Internal Service Communication:
+        
+[Gateway API] ──→ [Redis Stream:6379] ──→ [MCP Server] (futuro)
+      │                                          │
+      └──────────────────────────────────────────┘
+                (Direct HTTP futuro)
 ```
 
 ### Service Mesh (Kubernetes Services)
@@ -198,6 +282,44 @@ spec:
 **Acceso**:
 - Externo: `http://localhost/mcp/*` (via Ingress, si se expone)
 - Interno: `http://mcpserver.default.svc.cluster.local:80`
+
+---
+
+#### Redis Stream Service
+
+**Namespace**: `default`
+
+**Archivo**: `k8s/redis-stream.yaml`
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-stream
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+  selector:
+    app: redis-stream
+```
+
+**Función**:
+- Event streaming backend
+- Message broker entre servicios
+- Persistencia temporal de eventos
+
+**Acceso**:
+- Interno: `redis-stream.default.svc.cluster.local:6379`
+- No expuesto externamente (seguridad)
+
+**Verificar**:
+```bash
+kubectl get svc redis-stream
+kubectl describe svc redis-stream
+kubectl exec -it deployment/redis-stream -- redis-cli PING
+```
 
 ### Comunicación Inter-Servicio
 

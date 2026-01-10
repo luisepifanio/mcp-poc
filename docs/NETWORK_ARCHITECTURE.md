@@ -81,6 +81,31 @@ Este documento describe visualmente la arquitectura de networking implementada e
 │  │  │    Secret: gateway-api-credentials                 │ │ │
 │  │  └────────────────────────────────────────────────────┘ │ │
 │  │                                                          │ │
+│  │  ┌────────────────────────────────────────────────────┐ │ │
+│  │  │    Service: redis-stream                           │ │ │
+│  │  │    - Type: ClusterIP                               │ │ │
+│  │  │    - Port: 6379                                    │ │ │
+│  │  │    - TargetPort: 6379                              │ │ │
+│  │  │    - Selector: app=redis-stream                    │ │ │
+│  │  └────────────────────────────────────────────────────┘ │ │
+│  │                          ↓                               │ │
+│  │  ┌────────────────────────────────────────────────────┐ │ │
+│  │  │    Pod: redis-stream-xxxxxxxxxx-xxxxx              │ │ │
+│  │  │    Labels: app=redis-stream                        │ │ │
+│  │  │                                                    │ │ │
+│  │  │    ┌──────────────────────────────────────────┐   │ │ │
+│  │  │    │  Container: redis                        │   │ │ │
+│  │  │    │  - Image: redis:8.4-alpine               │   │ │ │
+│  │  │    │  - Port: 6379                            │   │ │ │
+│  │  │    │  - PersistentVolume: /data               │   │ │ │
+│  │  │    │  - Commands: redis-cli ping              │   │ │ │
+│  │  │    └──────────────────────────────────────────┘   │ │ │
+│  │  │                                                    │ │ │
+│  │  │    ConfigMap: redis-stream-configuration           │ │ │
+│  │  │    Secret: redis-stream-credentials                │ │ │
+│  │  │    PVC: redis-stream-pvc (1Gi)                     │ │ │
+│  │  └────────────────────────────────────────────────────┘ │ │
+│  │                                                          │ │
 │  └──────────────────────────────────────────────────────────┘ │
 │                                                                │
 └────────────────────────────────────────────────────────────────┘
@@ -113,9 +138,12 @@ metadata:
 ```python
 local_resource(
     'nginx-ingress-controller',
-    cmd='kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.0/deploy/static/provider/cloud/deploy.yaml'
+    cmd='kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.14.1/deploy/static/provider/kind/deploy.yaml'
 )
 ```
+
+**Nota crítica**: Usar provider `kind` porque Docker Desktop usa KIND como cluster provisioning method.
+KIND expone puertos via `hostPort: 80` y `hostPort: 443` directamente en localhost.
 
 **Función**:
 - Lee recursos `Ingress` del cluster
@@ -145,6 +173,8 @@ metadata:
   name: gateway-ingress
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /$2
+    # SSL redirect disabled - no TLS configured yet
+    # nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
   rules:
@@ -247,6 +277,68 @@ spec:
 kubectl get pods -l app=gateway-api
 kubectl logs -l app=gateway-api --tail=50 -f
 kubectl exec -it deployment/gateway-api -- /bin/bash
+```
+
+---
+
+### 5. Redis Stream Service
+
+**Namespace**: `default`
+
+**Archivo**: `k8s/redis-stream.yaml`
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-stream
+spec:
+  selector:
+    app: redis-stream
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+```
+
+**Función**:
+- Event streaming backend
+- Message broker entre servicios
+- Queue asíncrona de eventos
+
+**Acceso**:
+- Interno: `redis-stream.default.svc.cluster.local:6379`
+- No expuesto externamente (seguridad)
+
+**Verificar**:
+```bash
+kubectl get svc redis-stream
+kubectl get pods -l app=redis-stream
+kubectl logs -l app=redis-stream --tail=50
+
+# Conectarse con redis-cli
+kubectl exec -it deployment/redis-stream -- redis-cli
+# En redis-cli:
+> PING
+PONG
+> INFO stats
+> XINFO STREAM events-stream
+```
+
+**Configuración en Gateway API**:
+```yaml
+# gateway-api deployment usa estas variables
+env:
+  - name: REDIS_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: redis-stream-configuration
+        key: REDIS_HOST  # "redis-stream"
+  - name: REDIS_PORT
+    valueFrom:
+      configMapKeyRef:
+        name: redis-stream-configuration
+        key: REDIS_PORT  # "6379"
 ```
 
 ---

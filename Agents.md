@@ -2,10 +2,10 @@
 | ---------------- | --------------------------------------------------------------------------------------- |
 | **Project Name** | MCP POC Monorepo                                                                        |
 | **Description**  | Monorepo multi-servicio con arquitectura de microservicios, k8s, y desarrollo con Tilt |
-| **Stack**        | Python (FastAPI), Kubernetes, Docker, Tilt                                              |
+| **Stack**        | Python (FastAPI), Kubernetes, Docker, Tilt, Redis Streams                               |
 | **Location**     | `/Users/luisepifanio/Repos/mcp-poc`                                                     |
 | **Version**      | v0.1.0-alpha                                                                            |
-| **Last Updated** | 2026-01-08                                                                              |
+| **Last Updated** | 2026-01-09                                                                              |
 
 ---
 
@@ -256,10 +256,28 @@ graph TD
 
 ### Endpoints Disponibles
 
+#### Servicios HTTP Públicos
+
 | Endpoint                             | Descripción          | Requiere Auth |
 | ------------------------------------ | -------------------- | ------------- |
 | `http://localhost/api/ping`          | Health check         | No            |
 | `http://app-local.hades.ar/api/ping` | Health check (alias) | No            |
+
+#### Servicios Internos (Solo dentro del cluster)
+
+| Servicio | DNS Interno | Puerto | Propósito |
+|----------|-------------|--------|-----------|
+| gateway-api | `gateway-api.default.svc.cluster.local` | 80 | API Gateway |
+| redis-stream | `redis-stream.default.svc.cluster.local` | 6379 | Event streaming |
+
+**Acceso a Redis desde fuera del cluster** (solo para debugging):
+```bash
+# Port forward temporal
+kubectl port-forward svc/redis-stream 6379:6379
+
+# En otra terminal
+redis-cli -h localhost -p 6379 PING
+```
 
 ---
 
@@ -279,6 +297,19 @@ graph TD
 
 ---
 
+## 📝 Convenciones de Documentación
+
+- Diagramas en Mermaid: Todos los diagramas deben expresarse utilizando Mermaid (obligatorio). Motivo: es texto estructurado, versionable y fácil de revisar en PRs.
+
+Ejemplo mínimo:
+
+```mermaid
+graph TD
+   A[Cliente] --> B[Servicio]
+```
+
+---
+
 ## 🐛 Troubleshooting Común
 
 ### "curl localhost/api/ping no funciona"
@@ -291,8 +322,8 @@ graph TD
 kubectl get pods -n ingress-nginx
 
 # Si no existe, Tilt debería instalarlo automáticamente
-# Si falla, instalar manualmente:
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.0/deploy/static/provider/cloud/deploy.yaml
+# Si falla, instalar manualmente (usar provider 'kind' para Docker Desktop + KIND):
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.14.1/deploy/static/provider/kind/deploy.yaml
 
 # Esperar a que esté ready
 kubectl wait --namespace ingress-nginx \
@@ -360,6 +391,79 @@ curl --resolve app-local.hades.ar:80:127.0.0.1 http://app-local.hades.ar/api/pin
 ```
 
 **Nota**: El script `./scripts/setup-local-hosts.sh` hace el flush automáticamente.
+
+---
+
+### "Redis Stream no está disponible"
+
+**Síntomas**: Gateway API logs muestran errores de conexión a Redis.
+
+**Verificación**:
+```bash
+# Ver estado del pod
+kubectl get pods -l app=redis-stream
+
+# Ver logs
+kubectl logs -l app=redis-stream --tail=50
+
+# Probar conectividad
+kubectl exec -it deployment/redis-stream -- redis-cli PING
+# Debería responder: PONG
+```
+
+**Causas comunes**:
+1. Pod en estado CrashLoopBackOff
+2. PersistentVolumeClaim no montado
+3. ConfigMap o Secret faltante
+
+**Solución**:
+```bash
+# Si el pod está en error, verificar logs
+kubectl describe pod -l app=redis-stream
+
+# Si falta el PVC, verificar
+kubectl get pvc redis-stream-pvc
+kubectl describe pvc redis-stream-pvc
+
+# Re-crear todo el servicio si es necesario
+kubectl delete -f k8s/redis-stream.yaml
+kubectl apply -f k8s/redis-stream.yaml
+
+# Verificar que Gateway API pueda conectarse
+kubectl exec -it deployment/gateway-api -- sh
+# Dentro del pod:
+apk add redis  # Si redis-cli no está instalado
+redis-cli -h redis-stream -p 6379 PING
+```
+
+---
+
+### "Gateway API no puede conectarse a Redis"
+
+**Problema**: Variables de entorno REDIS_HOST/REDIS_PORT no están configuradas.
+
+**Verificación**:
+```bash
+# Ver env vars del pod gateway-api
+kubectl exec deployment/gateway-api -- env | grep REDIS
+
+# Debería mostrar:
+# REDIS_HOST=redis-stream
+# REDIS_PORT=6379
+```
+
+**Solución**:
+```bash
+# Verificar que ConfigMap existe
+kubectl get configmap redis-stream-configuration
+
+# Ver contenido
+kubectl describe configmap redis-stream-configuration
+
+# Si falta, aplicar manifiestos
+kubectl apply -f k8s/redis-stream.yaml
+kubectl rollout restart deployment/gateway-api
+```
 
 ---
 
@@ -437,6 +541,7 @@ git push origin main
 5. **Clean Architecture**: Todos los proyectos Python siguen el mismo patrón arquitectónico
 6. **Type safety**: mypy strict mode obligatorio
 7. **Linting estricto**: Ruff con reglas comunes en todos los proyectos
+8. **Diagramas en Mermaid**: Todos los diagramas y flujos deben escribirse en Mermaid.
 
 ---
 

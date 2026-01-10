@@ -3,12 +3,28 @@ kind: Ingress
 metadata:
   name: gateway-ingress
   annotations:
+    kubernetes.io/ingress.class: "nginx"
+    # SSL redirect disabled - no TLS configured yet
+    # nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Reescritura de path para que /api/ping llegue como /ping al backend
     nginx.ingress.kubernetes.io/rewrite-target: /$2
+    # Timeouts: Aseguran que Nginx espere lo suficiente por la respuesta del backend
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    # Keepalive: Mantiene conexiones persistentes para evitar reconexiones costosas
+    nginx.ingress.kubernetes.io/upstream-keepalive-timeout: "60"
+    nginx.ingress.kubernetes.io/upstream-keepalive-connections: "100"
+    nginx.ingress.kubernetes.io/upstream-keepalive-requests: "1000"
+    # Buffering: Evita que respuestas pequeñas se pierdan, pero sin exceder buffers
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    nginx.ingress.kubernetes.io/proxy-buffers: "4 32k"
+    # Evita problemas con headers grandes o respuestas fragmentadas
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
 spec:
   ingressClassName: nginx
   rules:
-    # Regla sin host específico - acepta cualquier host (localhost, 127.0.0.1, etc)
-    # Útil para Docker Desktop que no resuelve /etc/hosts correctamente
     - http:
         paths:
           - path: /api(/|$)(.*)
