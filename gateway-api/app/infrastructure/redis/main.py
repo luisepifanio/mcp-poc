@@ -2,9 +2,11 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from faststream import AckPolicy
-from faststream.redis import RedisBroker, StreamSub
-from faststream.redis import RedisMessage as NativeRedisMessage  # Importa el tipo base
+from faststream import (
+    AckPolicy,
+    Context,  # <--- Importante
+)
+from faststream.redis import RedisMessage, StreamSub
 from faststream.redis.fastapi import RedisRouter
 from faststream.redis.subscriber.usecases import StreamBatchSubscriber, StreamSubscriber
 
@@ -14,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 settings = AppSettings()
 
-router = RedisRouter(settings.redis_connection_url)
-broker = RedisBroker(settings.redis_connection_url)
+router = RedisRouter(settings.redis_connection_url, setup_state=False)
+broker = router.broker
 
 
 # Define a message handler using the router decorator
@@ -39,7 +41,7 @@ DemoSubscriber: Callable[
 @DemoSubscriber
 async def subscriber_demo(
     body: dict[str, Any],
-    msg: NativeRedisMessage,  # Usa Context para inyectarlo explícitamente
+    msg: RedisMessage = Context(),  # <--- Agrega Context() aquí
 ) -> None:
     try:
         logger.warning(f"Mensaje recibido: {body}")

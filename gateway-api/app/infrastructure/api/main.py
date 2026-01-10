@@ -1,12 +1,13 @@
 import logging
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
 
 from app.core.logconfig import setup_logging
+from app.infrastructure.publishers import RedisPublisher
 
-from ..redis.main import broker
+# from ..redis.main import broker # Just use broker from pubsub_router
 from ..redis.main import router as pubsub_router
 from .base_router import ExistingRouterAdapter
 from .ping_router import PingRouter
@@ -17,22 +18,18 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
-    # setup app
-    setup_logging()
-    # setup pubsub readines
-    # Asegúrate de que el broker esté conectado
-    if (
-        not hasattr(broker, "_connection")
-        or broker._connection is None
-        or broker._connection.connection is None
-    ):
-        await broker.connect()
-        logger.info("Connected to Redis broker has been established.")
+    async with AsyncExitStack() as stack:
+        # setup app
+        # 1) tu lifespan: logging, bbdd, etc.
+        setup_logging()
+        # 2) lifespan de FastStream
+        await stack.enter_async_context(pubsub_router.lifespan_context(_app))
 
-    yield
-    # TODO: Tear app if needed
-    # Close pubsub connections
-    await broker.stop()
+        yield
+        # AsyncExitStack se encarga de cerrar en orden inverso
+        # TODO: Tear app if needed
+        # Close pubsub connections
+        # await broker.stop()
 
 
 def bootstrap_api(app: FastAPI, registry: RouterRegistry) -> None:
@@ -44,9 +41,12 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(lifespan=lifespan)
 
+    # Create publisher implementation
+    publisher = RedisPublisher(pubsub_router.broker)
+
     registry = RouterRegistry()
     registry.add(ExistingRouterAdapter(pubsub_router))
-    registry.add(PingRouter(pubsub_router.broker))
+    registry.add(PingRouter(publisher))
 
     bootstrap_api(app, registry)
 
