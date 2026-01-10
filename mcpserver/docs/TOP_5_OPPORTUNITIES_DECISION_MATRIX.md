@@ -9,6 +9,7 @@
 ## Executive Summary
 
 Current state is **NOT SAFE** for production due to:
+
 - ❌ Coverage below gate (82.61% < 85%)
 - ❌ 12 FAILING tests blocking integration
 - ⚠️ Race condition in concurrency handling
@@ -38,9 +39,11 @@ RISK: Low (changes are isolated and well-scoped)
 ## 🥇 OPPORTUNITY #1: Remove Dead Code (app/main.py)
 
 ### Summary
+
 Delete unused file with no coverage, no usage, no tests.
 
 ### Details
+
 ```python
 # File: app/main.py (1 line)
 logger = logging.getLogger(__name__)
@@ -50,23 +53,28 @@ logger = logging.getLogger(__name__)
 ```
 
 ### Why?
+
 - ✓ 0% coverage, blocks coverage gate
 - ✓ No imports anywhere
 - ✓ No references in tests
 - ✓ No functional purpose
 
 ### Risks
+
 - ✗ NONE - no dependencies
 
 ### Testing
+
 - No tests needed (file has no code)
 
 ### Effort
+
 - **Estimate**: 5 minutes
 - **Complexity**: TRIVIAL
 - **Risk**: NONE
 
 ### Decision
+
 **✅ IMPLEMENT IMMEDIATELY**
 
 ---
@@ -74,6 +82,7 @@ logger = logging.getLogger(__name__)
 ## 🥈 OPPORTUNITY #2: Fix Race Condition in save_or_resolve_one()
 
 ### Summary
+
 Fix production concurrency bug in event deduplication logic.
 
 ### Details
@@ -81,6 +90,7 @@ Fix production concurrency bug in event deduplication logic.
 **Location**: `app/infrastructure/db/repository_event.py:170-220`
 
 **Current Flow**:
+
 ```python
 # Concurrent scenario: 2 requests with same external_uuid
 # Request 1: INSERT → SUCCESS (row 1 created)
@@ -93,6 +103,7 @@ Fix production concurrency bug in event deduplication logic.
 ```
 
 **Why It Happens**:
+
 1. Session 1 has row in memory (not yet visible to session 2)
 2. Session 2 tries INSERT, gets IntegrityError
 3. Session 2 catches error, tries SELECT
@@ -100,11 +111,13 @@ Fix production concurrency bug in event deduplication logic.
 5. `.one()` raises NoResultFound
 
 ### Impact
+
 - 🔴 **PRODUCTION BUG**: Concurrent requests can fail with 500 error
 - 🔴 **3 FAILING TESTS**: test_c1_c2_c3 in concurrency module
 - 🔴 **50+ UNCOVERED STATEMENTS**: Branch paths in error handling
 
 ### Current Tests Failing
+
 ```
 test_enqueue_event_concurrency_c1_c2.py::test_c1_concurrent_same_external_uuid
 test_enqueue_event_concurrency_c1_c2.py::test_c2_concurrent_same_internal_id
@@ -114,6 +127,7 @@ test_enqueue_event_concurrency_c1_c2.py::test_c3_concurrent_mixed_id_and_externa
 ### Solution Options
 
 **Option A**: Use `session.merge()` (RECOMMENDED)
+
 ```python
 # merge() handles conflicts by comparing all attributes
 # If exists: returns managed instance
@@ -124,7 +138,7 @@ except IntegrityError:
     # Use merge to resolve without race conditions
     await self.session.rollback()
     stmt = select(Event).where(
-        (Event.id == event.id) | 
+        (Event.id == event.id) |
         (Event.external_uuid == event.external_uuid)
     )
     result = await self.session.execute(stmt)
@@ -137,6 +151,7 @@ except IntegrityError:
 ```
 
 **Option B**: SELECT FOR UPDATE (stronger guarantees)
+
 ```python
 # Lock the row exclusively, preventing concurrent modifications
 stmt = select(Event).where(
@@ -146,18 +161,22 @@ existing = await self.session.execute(stmt)
 ```
 
 **Option C**: Use savepoint/nested transactions
+
 ```python
 # More granular control but more complex
 ```
 
 ### Recommendation: Use Option A (merge)
+
 - ✅ Matches idempotence requirement (same external_uuid = same result)
 - ✅ Less locking overhead than Option B
 - ✅ Natural SQLAlchemy pattern
 - ✅ Works with async sessions
 
 ### Testing
+
 Need to verify:
+
 1. ✓ 2 concurrent requests with same external_uuid → return same event
 2. ✓ 2 concurrent requests with same ID → return same event
 3. ✓ 2 concurrent requests (different ID, same external_uuid) → return same event
@@ -165,21 +184,26 @@ Need to verify:
 5. ✓ Idempotence guaranteed
 
 ### Effort
+
 - **Investigate**: 1-2 hours (understand session behavior)
 - **Implement**: 1-2 hours (modify save_or_resolve_one)
 - **Testing**: 1 hour (verify 3 concurrency tests pass)
 - **Total**: 3-5 hours
 
 ### Complexity
+
 - MEDIUM (requires understanding SQLAlchemy async session semantics)
 
 ### Risk
+
 - LOW (isolated change, well-tested, impacts only deduplication)
 
 ### Blocking Other Tasks?
+
 - ✓ BLOCKS #3 and #5 (depends on clean concurrent behavior)
 
 ### Decision
+
 **⚠️ IMPLEMENT EARLY (Day 2)** - This is a production bug that impacts other improvements.
 
 ---
@@ -187,11 +211,13 @@ Need to verify:
 ## 🥉 OPPORTUNITY #3: Add Redis Handler Functional Tests
 
 ### Summary
+
 Rewrite failing unit tests to properly test Redis handler with actual FastStream patterns.
 
 ### Details
 
 **Current Issue**:
+
 ```python
 # tests/unit/test_redis_handlers_unit.py (8 FAILING tests)
 # These tests mock the handler dependencies but don't test actual behavior:
@@ -202,6 +228,7 @@ Rewrite failing unit tests to properly test Redis handler with actual FastStream
 ```
 
 **Failing Tests**:
+
 ```
 test_startup_connects_when_not_connected
 test_startup_skips_connect_when_already_connected
@@ -214,32 +241,38 @@ test_settings_integration_with_redis_module
 ```
 
 **Coverage Impact**:
+
 - Current: 41% (77 stmts, 42 missing)
 - After fix: 85%+ (cover 42 statements)
 
 ### Root Cause
+
 Mock patches don't match actual code paths:
+
 ```python
 # WRONG: Patches non-existent attribute
 with patch("app.infrastructure.redis.main.processor_registry"):
     # This fails because main.py doesn't import processor_registry!
-    
+
 # CORRECT: Patch actual dependencies
 with patch("app.infrastructure.redis.main.ProcessEventIdealUseCase"):
     usecase_mock = ...
 ```
 
 ### Solution
+
 1. **Use FastStream test utilities**:
+
    ```python
    from faststream.testing import TestBroker
-   
+
    async def test_handler():
        async with TestBroker() as broker:
            # Actual async/await testing with in-memory Redis
    ```
 
 2. **Test actual message flow**:
+
    ```python
    # Publish message → Handler processes → Verify ack/nack
    result = await broker.publish(event_data, stream="processing-event-subject")
@@ -255,7 +288,9 @@ with patch("app.infrastructure.redis.main.ProcessEventIdealUseCase"):
    ```
 
 ### Testing Coverage
+
 Need tests for:
+
 1. ✓ Successful event processing (msg.ack)
 2. ✓ Processing error (msg.nack + error logged)
 3. ✓ Database not found (404 error, msg.nack)
@@ -266,6 +301,7 @@ Need tests for:
 8. ✓ Subscriber message dispatch
 
 ### Effort
+
 - **Learn FastStream patterns**: 1-2 hours
 - **Rewrite test suite**: 1-2 hours
 - **Add missing scenarios**: 1 hour
@@ -273,15 +309,19 @@ Need tests for:
 - **Total**: 3.5-4.5 hours
 
 ### Complexity
+
 - MEDIUM (requires learning FastStream test patterns)
 
 ### Risk
+
 - LOW (replacing broken tests with working ones)
 
 ### Blocking Other Tasks?
+
 - ✓ BLOCKED BY #2 (needs working race condition fix first)
 
 ### Decision
+
 **✅ IMPLEMENT AFTER #2** (Day 3)
 
 ---
@@ -289,25 +329,31 @@ Need tests for:
 ## 🏅 OPPORTUNITY #4: Add Processor Error Scenario Tests
 
 ### Summary
+
 Add unit tests for error classification logic in sync_processors.py.
 
 ### Details
 
 **Coverage Gap**:
+
 - Current: 79% (118 stmts, 17 missing)
 - Missing lines: 88, 104, 109, 164-173, 213, 271, 320-339, 443
 
 **What's Missing**:
+
 1. **ApiCallProcessor error classification**:
+
    - HTTP 4xx → PERMANENT (no retries)
    - HTTP 5xx → TRANSIENT (retry)
    - Timeout → TRANSIENT (retry)
 
 2. **GrpcProcessor error mapping**:
+
    - Status NOT_FOUND → PERMANENT
    - Status UNAVAILABLE → TRANSIENT
 
 3. **Retry exhaustion behavior**:
+
    - After max_attempts: mark FAILED
    - Log attempt count
 
@@ -318,18 +364,19 @@ Add unit tests for error classification logic in sync_processors.py.
 ### Solution
 
 **Test Template**:
+
 ```python
 @pytest.mark.asyncio
 async def test_api_processor_http_400_permanent_error():
     """4xx errors should not retry"""
     processor = ApiCallProcessor(http_client_mock)
-    
+
     # Mock HTTP response: 400 Bad Request
     http_client_mock.post.return_value = MockResponse(status=400)
-    
+
     event = make_event()
     result = await processor.process(event)
-    
+
     # Should fail immediately (no retry)
     assert result.is_err()
     error = result.unwrap_err()
@@ -340,23 +387,24 @@ async def test_api_processor_http_400_permanent_error():
 async def test_api_processor_http_503_transient_retries():
     """5xx errors should retry"""
     processor = ApiCallProcessor(http_client_mock)
-    
+
     # Mock HTTP response: 503 Service Unavailable
     http_client_mock.post.side_effect = [
         MockResponse(status=503),
         MockResponse(status=503),
         MockResponse(status=200),  # Success on 3rd try
     ]
-    
+
     event = make_event()
     result = await processor.process(event)
-    
+
     # Should succeed after retries
     assert result.is_ok()
     assert http_client_mock.post.call_count == 3  # 3 attempts
 ```
 
 ### Tests to Add (6-8 new tests)
+
 1. ApiCallProcessor: HTTP 4xx (PERMANENT)
 2. ApiCallProcessor: HTTP 5xx (TRANSIENT)
 3. ApiCallProcessor: Timeout (TRANSIENT)
@@ -367,21 +415,26 @@ async def test_api_processor_http_503_transient_retries():
 8. Exception handling: unknown error type
 
 ### Effort
+
 - **Create mocks**: 30 min
 - **Write tests**: 1 hour
 - **Verify coverage**: 30 min
 - **Total**: 2 hours
 
 ### Complexity
+
 - SMALL (straightforward error scenarios)
 
 ### Risk
+
 - NONE (new tests only, no code changes)
 
 ### Blocking Other Tasks?
+
 - ✗ INDEPENDENT (can be done anytime)
 
 ### Decision
+
 **✅ IMPLEMENT IN PHASE 1** (Today, after #1)
 
 ---
@@ -389,6 +442,7 @@ async def test_api_processor_http_503_transient_retries():
 ## 🏅 OPPORTUNITY #5: Remove Legacy ProcessEventUseCase
 
 ### Summary
+
 Delete deprecated ProcessEventUseCase that was replaced by ProcessEventIdealUseCase.
 
 ### Details
@@ -396,6 +450,7 @@ Delete deprecated ProcessEventUseCase that was replaced by ProcessEventIdealUseC
 **Location**: `app/core/usecases/event_usecases.py:215-337`
 
 **Current State**:
+
 - ✗ 122 lines of code
 - ✗ ~120 lines uncovered (46% coverage)
 - ✗ Replaced by ProcessEventIdealUseCase
@@ -403,37 +458,45 @@ Delete deprecated ProcessEventUseCase that was replaced by ProcessEventIdealUseC
 - ✓ Has tests but they're low priority
 
 **Why Keep It?**
+
 - ✗ NO REASON - ProcessEventIdealUseCase is superior
 - ✗ Maintenance burden (keep both in sync)
 - ✗ Confuses developers (which one to use?)
 - ✗ Takes up coverage space
 
 **What to Delete**:
+
 1. ProcessEventUseCase class (lines 215-337)
 2. Helper methods specific to this use case
 3. Associated unit tests
 4. References in documentation
 
 **What NOT to Delete**:
+
 - ✓ EnqueueEventUseCase (still used)
 - ✓ ProcessEventIdealUseCase (canonical)
 - ✓ Helper utilities (transition_event, etc.)
 
 ### Dependencies
+
 Need to verify no other code uses ProcessEventUseCase:
+
 ```bash
 grep -r "ProcessEventUseCase" app/ tests/ docs/ --exclude="*.pyc"
 # Should only find: definition + tests
 ```
 
 ### Testing
+
 Verify:
+
 1. ✓ No imports of ProcessEventUseCase remain
 2. ✓ No references in Redis handler
 3. ✓ Tests still pass (tests for this class will be deleted)
 4. ✓ Coverage improves
 
 ### Effort
+
 - **Verify no usage**: 30 min
 - **Delete class + tests**: 30 min
 - **Clean up imports**: 30 min
@@ -441,15 +504,19 @@ Verify:
 - **Total**: 2.5 hours
 
 ### Complexity
+
 - MEDIUM (requires careful dependency checking)
 
 ### Risk
+
 - LOW (isolated deletion, ProcessEventIdealUseCase replacement ready)
 
 ### Blocking Other Tasks?
+
 - ✗ INDEPENDENT (depends on #2 being done for clean state)
 
 ### Decision
+
 **✅ IMPLEMENT IN PHASE 4** (Day 4, after all blockers resolved)
 
 ---
@@ -507,21 +574,25 @@ TOTAL TIME: ~16 hours (~2 developer days)
 ## 📋 Success Criteria
 
 ### Coverage Gate
+
 - [x] Target: 95%+ (threshold: 85%)
 - [x] All high-coverage modules: > 90%
 - [x] No modules below 80%
 
 ### Tests
+
 - [x] All 255 tests PASSING
 - [x] Zero FAILING tests
 - [x] Zero ERRORS
 
 ### Code Quality
+
 - [x] Ruff checks: PASS
 - [x] Mypy strict: PASS
 - [x] No warnings
 
 ### Production Readiness
+
 - [x] Race condition: FIXED
 - [x] Critical paths: TESTED
 - [x] Error handling: COVERED

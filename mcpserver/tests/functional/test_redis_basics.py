@@ -10,7 +10,10 @@ from app.core.usecases.event_usecases import EnqueuedEventUseCaseInput
 
 # Skip this entire module due to AsyncEngine(sqlite) incompatibility
 # These tests need aiosqlite driver configured or a real Redis instance
-pytest.skip(reason="Redis functional tests skipped - requires aiosqlite or external Redis", allow_module_level=True)
+pytest.skip(
+    reason="Redis functional tests skipped - requires aiosqlite or external Redis",
+    allow_module_level=True,
+)
 
 from app.infrastructure.redis.main import (
     app,

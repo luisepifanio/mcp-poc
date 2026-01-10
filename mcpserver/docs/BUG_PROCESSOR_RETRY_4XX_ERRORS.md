@@ -66,14 +66,14 @@ except httpx.HTTPStatusError as e:
 
 ### Production Scenarios
 
-| Escenario                  | Error   | Intentos | Latencia Total | Correcto |
-| -------------------------- | ------- | -------- | -------------- | -------- |
-| **API con token inválido** | 401     | 5        | ~1700ms        | ❌       |
-| **Recurso no existe**      | 404     | 5        | ~1700ms        | ❌       |
-| **Request malformado**     | 400     | 5        | ~1700ms        | ❌       |
-| **Rate limit alcanzado**   | 429     | 5        | ~1700ms        | ❌       |
-| **Server error**           | 503     | 5        | ~1700ms        | ✅       |
-| **Gateway timeout**        | 504     | 5        | ~1700ms        | ✅       |
+| Escenario                  | Error | Intentos | Latencia Total | Correcto |
+| -------------------------- | ----- | -------- | -------------- | -------- |
+| **API con token inválido** | 401   | 5        | ~1700ms        | ❌       |
+| **Recurso no existe**      | 404   | 5        | ~1700ms        | ❌       |
+| **Request malformado**     | 400   | 5        | ~1700ms        | ❌       |
+| **Rate limit alcanzado**   | 429   | 5        | ~1700ms        | ❌       |
+| **Server error**           | 503   | 5        | ~1700ms        | ✅       |
+| **Gateway timeout**        | 504   | 5        | ~1700ms        | ✅       |
 
 ### Cost Impact
 
@@ -96,11 +96,11 @@ async def test_api_processor_http_400_permanent_error():
     errors should NOT be retried.
     """
     # ... setup ...
-    
+
     # Should raise ValueError (converted from 4xx)
     with pytest.raises(ValueError, match="HTTP 400"):
         await processor.process(event)
-    
+
     # ⚠️ BUG: Currently retries 5 times (should be 1)
     assert mock_client.request.call_count == 5  # CURRENT (buggy) behavior
 ```
@@ -116,11 +116,13 @@ async def test_api_processor_http_400_permanent_error():
 **Changes made**:
 
 1. **Import added** (line 19):
+
 ```python
 from tenacity import retry_if_not_exception_type
 ```
 
 2. **AsyncRetrying configuration updated** (lines 127-135):
+
 ```python
 async_retrying = AsyncRetrying(
     stop=stop_after_attempt(retry_config.max_attempts),
@@ -131,16 +133,19 @@ async_retrying = AsyncRetrying(
 ```
 
 3. **Test updated** to validate correct behavior:
+
 ```python
 assert mock_client.request.call_count == 1  # ✅ Validates 1 attempt only
 ```
 
 **Validation**:
+
 - ✅ All 11 error scenario tests passing
 - ✅ All 26 existing processor tests passing
 - ✅ No regressions detected
 
 **Performance impact**:
+
 - **Before**: 5 attempts × ~340ms = ~1700ms total latency for 4xx errors
 - **After**: 1 attempt × ~0ms = ~0ms (immediate failure)
 - **Improvement**: -1700ms per 4xx error ✨
@@ -163,11 +168,13 @@ async_retrying = AsyncRetrying(
 ```
 
 **Pros**:
+
 - Simple, 1-line change
 - Aligns with existing error classification logic
 - No impact on TRANSIENT errors (5xx, timeouts, connection)
 
 **Cons**:
+
 - Si hay OTROS ValueError (no HTTP) que deberían reintentarse, necesitarían ajuste
 
 ### Option 2: Custom retry predicate
@@ -192,10 +199,12 @@ async_retrying = AsyncRetrying(
 ```
 
 **Pros**:
+
 - Explícito, auto-documentado
 - Flexible para agregar casos especiales
 
 **Cons**:
+
 - Más código, más complejo
 - Duplica lógica de `classify_error()` method
 

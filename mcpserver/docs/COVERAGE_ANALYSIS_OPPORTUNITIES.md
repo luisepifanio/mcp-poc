@@ -10,15 +10,15 @@
 
 ### 🔴 LOW COVERAGE (< 70%)
 
-| Module | Coverage | Statements | Missing | Priority |
-|--------|----------|------------|---------|----------|
-| `app/main.py` | 0% | 1 | 1 | 🔴 Remove |
-| `app/infrastructure/redis/main.py` | 41% | 77 | 42 | 🔴 High |
-| `app/core/usecases/event_usecases.py` | 46% | 122 | 57 | 🔴 High |
-| `app/infrastructure/db/connection.py` | 79% | 28 | 6 | 🟡 Medium |
-| `app/infrastructure/db/models/default.py` | 73% | 20 | 4 | 🟡 Low |
-| `app/core/processor_registry.py` | 72% | 41 | 10 | 🟡 Medium |
-| `app/infrastructure/processors/sync_processors.py` | 79% | 118 | 17 | 🟡 Medium |
+| Module                                             | Coverage | Statements | Missing | Priority  |
+| -------------------------------------------------- | -------- | ---------- | ------- | --------- |
+| `app/main.py`                                      | 0%       | 1          | 1       | 🔴 Remove |
+| `app/infrastructure/redis/main.py`                 | 41%      | 77         | 42      | 🔴 High   |
+| `app/core/usecases/event_usecases.py`              | 46%      | 122        | 57      | 🔴 High   |
+| `app/infrastructure/db/connection.py`              | 79%      | 28         | 6       | 🟡 Medium |
+| `app/infrastructure/db/models/default.py`          | 73%      | 20         | 4       | 🟡 Low    |
+| `app/core/processor_registry.py`                   | 72%      | 41         | 10      | 🟡 Medium |
+| `app/infrastructure/processors/sync_processors.py` | 79%      | 118        | 17      | 🟡 Medium |
 
 ### 🟢 GOOD COVERAGE (> 85%)
 
@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 ```
 
 **Assessment**:
+
 - ✗ No usage found in codebase
 - ✗ Not imported anywhere
 - ✗ No tests
@@ -61,18 +62,21 @@ class ProcessEventUseCase(AsyncUseCase[...]):
 ```
 
 **Assessment**:
+
 - ✗ Not used in Redis handlers (uses ProcessEventIdealUseCase)
 - ✗ Covered by tests but tests are FAILING (12 failed in redis_handlers_unit.py)
 - ✓ ProcessEventIdealUseCase is the canonical replacement
 - 📍 Contains ~120 lines, ~46% coverage
 
 **Unused Methods in File**:
+
 1. `transition_event()` - only used internally by ProcessEventUseCase
 2. `ProcessEventUseCase` class entirely (replace with ProcessEventIdealUseCase)
 
 **Impact**: Removing would remove ~100 uncovered lines (estimated +8% coverage improvement)
 
 **Effort**: MEDIUM (2-3 hours)
+
 - Delete ProcessEventUseCase class
 - Delete transition_event helper
 - Update/delete associated tests
@@ -89,16 +93,17 @@ Missing Coverage Lines: 63-69, 76-81, 116-182, 216-238
 ```
 
 **Assessment**:
+
 - ✓ Critical handler code (enqueue + processing)
 - ✗ 42 statements untested
 - 📍 Issue: Tests skip actual Redis/FastStream integration
 
 **Untested Sections**:
+
 1. **handle_enqueue_event** (Lines 116-182): Retry logic paths
    - Success path (msg.ack)
    - Error paths (msg.nack)
    - Retry exhaustion
-   
 2. **handle_processing_event_queue** (Lines 216-238): Error handling
    - Exception catching
    - Unexpected errors
@@ -109,6 +114,7 @@ Missing Coverage Lines: 63-69, 76-81, 116-182, 216-238
 **Impact**: Adding 8-10 functional tests → +15-20% coverage on this file
 
 **Effort**: MEDIUM (3-4 hours)
+
 - Create integration tests with in-memory Redis
 - Test actual FastStream subscriber behavior
 - Test retry strategy timing
@@ -119,12 +125,14 @@ Missing Coverage Lines: 63-69, 76-81, 116-182, 216-238
 ### 📦 `app/core/usecases/event_usecases.py` - **LEGACY DUPLICATE ENQUEUE**
 
 **Assessment**:
+
 - ✓ EnqueueEventUseCase is USED (in Redis handler)
 - ✓ Tests exist (46% coverage)
 - ✗ Inconsistent error handling
 - ✗ Some branches never executed
 
 **Uncovered Branches**:
+
 1. Input validation edge cases (Lines 80, 129, 178, 200-201)
 2. UUID auto-generation fallback (Lines 235)
 3. as_event_entity error paths (Lines 260-337)
@@ -134,6 +142,7 @@ Missing Coverage Lines: 63-69, 76-81, 116-182, 216-238
 **Impact**: Adding 5-6 unit tests → +15-20% coverage on this file
 
 **Effort**: SMALL (1-2 hours)
+
 - Add unit tests for validation failures
 - Test empty/invalid input handling
 - Test UUID fallback scenarios
@@ -147,11 +156,13 @@ Missing Coverage: Lines 88, 104, 109, 164-173, 213, 271, 320-339, 443
 ```
 
 **Assessment**:
+
 - ✓ Core processor implementations
 - ✗ Error classification paths untested
 - ✗ Exception handling branches missing
 
 **Untested Scenarios**:
+
 1. **ApiCallProcessor**: HTTP 5xx vs 4xx classification (Lines 88, 104, 109)
 2. **Retry timeout handling** (Lines 164-173)
 3. **gRPC error mapping** (Lines 271, 320-339)
@@ -162,6 +173,7 @@ Missing Coverage: Lines 88, 104, 109, 164-173, 213, 271, 320-339, 443
 **Impact**: Adding 6-8 error scenario tests → +10-15% coverage
 
 **Effort**: SMALL-MEDIUM (2-3 hours)
+
 - Create mock HTTP responses (4xx, 5xx, timeout)
 - Test error classification logic
 - Test retry exhaustion behavior
@@ -192,6 +204,7 @@ FAILED tests/functional/test_savemany_event_repository_conflict.py (1 error)
 ```
 
 **Root Causes**:
+
 1. **Redis Handler Tests**: Mock patches fail (broker, session) → Skip actual execution
 2. **Concurrency Tests**: save_or_resolve_one() fails on IntegrityError → Concurrent inserts
 3. **Repository Test**: Race condition not fixed in save_or_resolve_one logic
@@ -199,6 +212,7 @@ FAILED tests/functional/test_savemany_event_repository_conflict.py (1 error)
 **Impact**: 12 failing tests = ~50 untested statements + branch gaps
 
 **Effort**: MEDIUM-HIGH (4-6 hours)
+
 - Fix redis handler test mocks (patch correct targets)
 - Fix save_or_resolve_one race condition (use merge logic)
 - Add proper transaction isolation in functional tests
@@ -211,7 +225,8 @@ FAILED tests/functional/test_savemany_event_repository_conflict.py (1 error)
 
 **What**: Delete `app/main.py` (1 statement)
 
-**Why**: 
+**Why**:
+
 - Zero coverage, no usage
 - Blocks coverage gate trivially
 
@@ -227,12 +242,14 @@ FAILED tests/functional/test_savemany_event_repository_conflict.py (1 error)
 **What**: Fix `save_or_resolve_one` race condition in repository
 
 **Why**:
+
 - 3 FAILING tests (high impact on coverage)
 - Blocks 50+ statements from being tested
 - Root cause: IntegrityError on concurrent external_uuid conflicts
 
 **Impact**: +4-5% coverage + fix production concurrency bug  
 **Effort**: MEDIUM (3-4 hours)
+
 - Analyze concurrency issue in detail
 - Fix repository logic (use merge() or select-for-update)
 - Verify tests pass
@@ -247,12 +264,14 @@ FAILED tests/functional/test_savemany_event_repository_conflict.py (1 error)
 **What**: Create proper functional tests for Redis handlers
 
 **Why**:
+
 - 8 FAILING unit tests due to mock issues
 - Missing 42 statements in critical handler code
 - Tests need actual async/await + in-memory Redis
 
 **Impact**: +8-10% coverage + remove FAILING tests  
 **Effort**: MEDIUM (3-4 hours)
+
 - Rewrite handler tests with proper FastStream mocks
 - Use async test fixtures
 - Test retry paths
@@ -267,12 +286,14 @@ FAILED tests/functional/test_savemany_event_repository_conflict.py (1 error)
 **What**: Add error scenario tests to sync_processors.py
 
 **Why**:
+
 - Easy to add (mock responses)
 - Covers critical error paths
 - Blocks ~17 statements
 
 **Impact**: +2-3% coverage  
 **Effort**: SMALL (2 hours)
+
 - Add mock HTTP error responses (4xx, 5xx)
 - Test error classification
 - Test timeout scenarios
@@ -287,6 +308,7 @@ FAILED tests/functional/test_savemany_event_repository_conflict.py (1 error)
 **What**: Delete ProcessEventUseCase (deprecated, 120 lines)
 
 **Why**:
+
 - Replaced by ProcessEventIdealUseCase
 - Covers low-priority functionality
 - Complex state machine logic with gaps
@@ -294,6 +316,7 @@ FAILED tests/functional/test_savemany_event_repository_conflict.py (1 error)
 
 **Impact**: +2-3% coverage + reduce complexity  
 **Effort**: MEDIUM-HIGH (2-3 hours)
+
 - Delete class + tests
 - Clean up imports
 - Verify no other uses
@@ -346,14 +369,14 @@ Bonus (if time):
 
 ## ✅ Expected Outcomes
 
-| Task | Current | Target | Gain |
-|------|---------|--------|------|
-| Overall Coverage | 82.61% | 95%+ | +12% |
-| app/main.py | 0% | REMOVED | - |
-| app/infrastructure/redis/main.py | 41% | 85%+ | +44% |
-| app/core/usecases/event_usecases.py | 46% | 85%+ | +39% |
-| Failing Tests | 12 ❌ | 0 ✅ | Fix ALL |
-| Lines Coverage | 173 missing | < 80 missing | -93 lines |
+| Task                                | Current     | Target       | Gain      |
+| ----------------------------------- | ----------- | ------------ | --------- |
+| Overall Coverage                    | 82.61%      | 95%+         | +12%      |
+| app/main.py                         | 0%          | REMOVED      | -         |
+| app/infrastructure/redis/main.py    | 41%         | 85%+         | +44%      |
+| app/core/usecases/event_usecases.py | 46%         | 85%+         | +39%      |
+| Failing Tests                       | 12 ❌       | 0 ✅         | Fix ALL   |
+| Lines Coverage                      | 173 missing | < 80 missing | -93 lines |
 
 ---
 
@@ -364,6 +387,7 @@ Bonus (if time):
 **Location**: `app/infrastructure/db/repository_event.py:170-220`
 
 **Problem**:
+
 ```python
 # Concurrent insert attempt
 # Request 1: INSERT with external_uuid=X → SUCCESS
@@ -373,6 +397,7 @@ Bonus (if time):
 ```
 
 **Why It's Critical**:
+
 - Production bug: concurrent requests can fail
 - Currently masked by catch + return Err
 - Functional tests expose the issue (3 FAILING)
@@ -386,6 +411,7 @@ Bonus (if time):
 **Location**: `tests/unit/test_redis_handlers_unit.py`
 
 **Problem**:
+
 ```python
 # Tests patch FastStream broker + UoW
 # But never actually test:
@@ -396,6 +422,7 @@ Bonus (if time):
 ```
 
 **Why It's Critical**:
+
 - Handler is critical path in production
 - 42 untested statements
 - Error paths untested → silent failures possible
@@ -407,12 +434,14 @@ Bonus (if time):
 ## 📝 Notes for Agentes IA
 
 Use this document to:
+
 1. **Identify quick wins** (#1, #4 can be done in < 4 hours)
 2. **Understand blockers** (race condition must be fixed first)
 3. **Plan sprints** (recommend 2-3 day effort for full coverage)
 4. **Prioritize by impact** (concurrency fix > redis tests > cleanup)
 
 All changes should:
+
 - ✅ Maintain 85%+ coverage gate
 - ✅ Pass ruff + mypy checks
 - ✅ Include comprehensive tests

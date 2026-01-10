@@ -17,7 +17,6 @@ from app.core.entities import Event, EventState
 from app.core.usecases.event_usecases import EnqueuedEventUseCaseOutput
 from app.errors import ErrorCatalog, ErrorDetail
 
-
 # ===========================
 # STARTUP HANDLER TESTS
 # ===========================
@@ -27,7 +26,7 @@ from app.errors import ErrorCatalog, ErrorDetail
 async def test_startup_handler_with_broker_not_connected() -> None:
     """
     Test startup handler logic when broker is not connected.
-    
+
     Simulates the startup function behavior without importing redis.main.
     """
     # Mock broker
@@ -47,7 +46,7 @@ async def test_startup_handler_with_broker_not_connected() -> None:
 async def test_startup_handler_with_broker_already_connected() -> None:
     """
     Test startup handler logic when broker is already connected.
-    
+
     Simulates the startup function behavior without importing redis.main.
     """
     # Mock broker with existing connection
@@ -74,7 +73,7 @@ async def test_startup_handler_with_broker_already_connected() -> None:
 async def test_subscriber_demo_handler_acks_on_success() -> None:
     """
     Test subscriber_demo handler logic on successful processing.
-    
+
     Simulates the subscriber_demo function behavior without importing redis.main.
     """
     msg = MagicMock()
@@ -98,7 +97,7 @@ async def test_subscriber_demo_handler_acks_on_success() -> None:
 async def test_subscriber_demo_handler_nacks_on_ack_exception() -> None:
     """
     Test subscriber_demo handler logic when ack() raises an exception.
-    
+
     Simulates the subscriber_demo function behavior without importing redis.main.
     """
     msg = MagicMock()
@@ -126,7 +125,7 @@ async def test_subscriber_demo_handler_nacks_on_ack_exception() -> None:
 async def test_handle_processing_event_queue_acks_on_success() -> None:
     """
     Test handle_processing_event_queue handler logic on successful processing.
-    
+
     Simulates the handler behavior without importing redis.main.
     """
     msg = MagicMock()
@@ -207,7 +206,7 @@ async def test_handle_processing_event_queue_acks_on_success() -> None:
 async def test_handle_processing_event_queue_handles_not_found() -> None:
     """
     Test handle_processing_event_queue handler logic when event is not found.
-    
+
     Simulates the handler behavior without importing redis.main.
     """
     msg = MagicMock()
@@ -262,7 +261,7 @@ async def test_handle_processing_event_queue_handles_not_found() -> None:
 async def test_handle_processing_event_queue_nacks_on_exception() -> None:
     """
     Test handle_processing_event_queue handler logic when an exception occurs.
-    
+
     Simulates the handler behavior without importing redis.main.
     """
     msg = MagicMock()
@@ -295,5 +294,3 @@ async def test_handle_processing_event_queue_nacks_on_exception() -> None:
 
     msg.nack.assert_awaited_once()
     msg.ack.assert_not_awaited()
-
-

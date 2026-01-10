@@ -2,15 +2,17 @@
 
 **Status**: Analysis Complete  
 **Recommendation**: NOT YET PRODUCTION READY (82.61% coverage < 85% gate)  
-**Timeline**: 4 phases, ~16 hours total  
+**Timeline**: 4 phases, ~16 hours total
 
 ---
 
 ## PHASE 1: QUICK WINS (Today - 4 hours)
 
 ### Task #1: Remove Dead Code [5 MIN]
+
 **File**: `app/main.py`  
 **Action**:
+
 ```bash
 # 1. Delete the file
 rm app/main.py
@@ -26,17 +28,19 @@ uv run pytest -q
 
 **Effort**: TRIVIAL (5 min)  
 **Impact**: +0.08% coverage  
-**Risk**: NONE  
+**Risk**: NONE
 
 ---
 
 ### Task #4: Add Processor Error Tests [2 HOURS]
+
 **File**: `tests/unit/test_sync_processors_error_unit.py` (NEW)  
 **Actions**:
+
 ```bash
 # 1. Create new test file with error scenarios:
 #    - ApiCallProcessor: HTTP 4xx (PERMANENT)
-#    - ApiCallProcessor: HTTP 5xx (TRANSIENT)  
+#    - ApiCallProcessor: HTTP 5xx (TRANSIENT)
 #    - ApiCallProcessor: Timeout (TRANSIENT)
 #    - GrpcProcessor: Error classification
 #    - Retry exhaustion
@@ -72,21 +76,24 @@ uv run pytest tests/unit/test_sync_processors_error_unit.py -v
 
 **Effort**: SMALL (2 hours)  
 **Impact**: +2-3% coverage  
-**Risk**: NONE (new tests only)  
+**Risk**: NONE (new tests only)
 
 ---
 
 ## PHASE 2: INVESTIGATION & CRITICAL FIX (Tomorrow - 4-5 hours)
 
 ### Task #2: Fix Race Condition [3-4 HOURS]
+
 **File**: `app/infrastructure/db/repository_event.py` (lines 170-220)  
 **Problem**: Concurrent requests with same external_uuid cause NoResultFound  
 **Tests Failing**:
+
 - test_c1_concurrent_same_external_uuid
 - test_c2_concurrent_same_internal_id
 - test_c3_concurrent_mixed_id_and_external_uuid
 
 **Investigation Steps**:
+
 ```bash
 # 1. Run failing tests to see exact error
 uv run pytest tests/functional/test_enqueue_event_concurrency_c1_c2.py -v
@@ -106,6 +113,7 @@ uv run pytest tests/functional/test_enqueue_event_concurrency_c1_c2.py -v
 ```
 
 **Implementation** (Option A - Recommended):
+
 ```python
 # In save_or_resolve_one():
 try:
@@ -113,25 +121,26 @@ try:
 except IntegrityError:
     # Collision detected; resolve by finding existing
     await self.session.rollback()
-    
+
     # Query both ID and external_uuid
     stmt = select(Event).where(
-        (Event.id == event.id) | 
+        (Event.id == event.id) |
         (Event.external_uuid == event.external_uuid)
     )
     result = await self.session.execute(stmt)
     existing = result.scalars().first()
-    
+
     if existing:
         # Merge existing instance
         merged = await self.session.merge(existing)
         return Ok([merged])
-    
+
     # If no existing found, this is unexpected
     raise  # Re-raise IntegrityError
 ```
 
 **Verification**:
+
 ```bash
 # 1. Run failing tests
 uv run pytest tests/functional/test_enqueue_event_concurrency_c1_c2.py::test_c1_concurrent_same_external_uuid -v
@@ -151,20 +160,23 @@ uv run pytest --cov=app --cov-fail-under=85 -q
 **Effort**: MEDIUM (3-4 hours)  
 **Impact**: +4-5% coverage + PRODUCTION BUG FIX  
 **Risk**: LOW (isolated change, well-tested)  
-**Blocker**: NONE (but blocks #3, #5)  
+**Blocker**: NONE (but blocks #3, #5)
 
 ---
 
 ## PHASE 3: CRITICAL PATH TESTING (Day 3 - 3-4 hours)
 
 ### Task #3: Rewrite Redis Handler Tests [3-4 HOURS]
-**Files**: 
+
+**Files**:
+
 - `tests/unit/test_redis_handlers_unit.py` (FIX 8 FAILING TESTS)
 - `tests/unit/test_redis_config_unit.py` (FIX 2 FAILING TESTS)
 
 **Current Issue**: Tests mock dependencies but don't test actual behavior
 
 **Solution**: Use FastStream test utilities
+
 ```bash
 # 1. Learn FastStream testing patterns:
 #    - TestBroker context manager
@@ -202,15 +214,17 @@ uv run pytest tests/unit/test_redis_config_unit.py -v
 **Effort**: MEDIUM (3-4 hours)  
 **Impact**: +8-10% coverage + FIX 10 FAILING TESTS  
 **Risk**: LOW (replacing broken tests)  
-**Blocker**: Depends on #2 being fixed  
+**Blocker**: Depends on #2 being fixed
 
 ---
 
 ## PHASE 4: CLEANUP (Optional Day 4 - 2-3 hours)
 
 ### Task #5: Remove Legacy ProcessEventUseCase [2-3 HOURS]
+
 **File**: `app/core/usecases/event_usecases.py` (lines 215-337)  
 **Actions**:
+
 ```bash
 # 1. Verify no other code uses ProcessEventUseCase:
 grep -r "ProcessEventUseCase" app/ tests/ docs/ --exclude="*.pyc"
@@ -243,18 +257,20 @@ uv run pytest -q
 **Effort**: MEDIUM (2-3 hours)  
 **Impact**: +2-3% coverage + REDUCE TECH DEBT  
 **Risk**: LOW (isolated deletion)  
-**Blocker**: Depends on #2  
+**Blocker**: Depends on #2
 
 ---
 
 ## 🚀 EXECUTION CHECKLIST
 
 ### BEFORE Starting
+
 - [ ] Read `docs/TOP_5_OPPORTUNITIES_DECISION_MATRIX.md`
 - [ ] Understand all 5 opportunities
 - [ ] Review current coverage report
 
 ### PHASE 1 (Today)
+
 - [ ] Task #1: Delete app/main.py
 - [ ] Verify no imports remain
 - [ ] Task #4: Create new error tests file
@@ -264,6 +280,7 @@ uv run pytest -q
 - [ ] Commit: `git add -A && git commit -m "test: add processor error scenarios + cleanup dead code"`
 
 ### PHASE 2 (Tomorrow)
+
 - [ ] Read failing test logs in detail
 - [ ] Understand race condition root cause
 - [ ] Design solution (merge vs SELECT FOR UPDATE)
@@ -274,6 +291,7 @@ uv run pytest -q
 - [ ] Commit: `git add -A && git commit -m "fix: resolve race condition in save_or_resolve_one using merge pattern"`
 
 ### PHASE 3 (Day 3)
+
 - [ ] Learn FastStream test patterns
 - [ ] Rewrite test_redis_handlers_unit.py (8 tests)
 - [ ] Rewrite test_redis_config_unit.py (2 tests)
@@ -283,6 +301,7 @@ uv run pytest -q
 - [ ] Commit: `git add -A && git commit -m "test: rewrite redis handler tests with faststream patterns"`
 
 ### PHASE 4 (Optional Day 4)
+
 - [ ] Verify ProcessEventUseCase not used elsewhere
 - [ ] Delete legacy class + tests
 - [ ] Clean up imports
@@ -291,7 +310,9 @@ uv run pytest -q
 - [ ] Commit: `git add -A && git commit -m "refactor: remove deprecated processevenusecase"`
 
 ### FINAL VERIFICATION
+
 Before pushing to production:
+
 - [ ] All 255 tests PASSING
 - [ ] Coverage >= 95%
 - [ ] `uv run ruff check .` PASS
@@ -304,13 +325,13 @@ Before pushing to production:
 
 ## 📊 SUCCESS METRICS
 
-| Metric | Current | After Phase 1 | After Phase 3 | After Phase 4 |
-|--------|---------|---------------|---------------|---------------|
-| Coverage | 82.61% | 84-85% | 92-95% ✅ | 95%+ ✨ |
-| Tests Passing | 236 | 244+ | 252+ | 255 ✅ |
-| Tests Failing | 12 | 4-6 | 0 ✅ | 0 ✅ |
-| Dead Code Lines | ~100 | ~100 | ~100 | ~0 🧹 |
-| Production Ready | ❌ | ⚠️ | ✅ | ✅✨ |
+| Metric           | Current | After Phase 1 | After Phase 3 | After Phase 4 |
+| ---------------- | ------- | ------------- | ------------- | ------------- |
+| Coverage         | 82.61%  | 84-85%        | 92-95% ✅     | 95%+ ✨       |
+| Tests Passing    | 236     | 244+          | 252+          | 255 ✅        |
+| Tests Failing    | 12      | 4-6           | 0 ✅          | 0 ✅          |
+| Dead Code Lines  | ~100    | ~100          | ~100          | ~0 🧹         |
+| Production Ready | ❌      | ⚠️            | ✅            | ✅✨          |
 
 ---
 
@@ -385,6 +406,7 @@ Coverage: +2-3%"
 1. **Phase 2 must be done before Phase 3** - Can't properly test Redis handlers until race condition is fixed
 2. **All phases must pass `uv run pytest -q`** - Don't proceed if tests fail
 3. **Quality gates must pass before commit**:
+
    ```bash
    uv run ruff check .      # Must PASS
    uv run mypy app          # Must PASS (strict mode)
@@ -398,6 +420,7 @@ Coverage: +2-3%"
 ## 📞 REFERENCE DOCUMENTS
 
 See also:
+
 - `docs/COVERAGE_ANALYSIS_OPPORTUNITIES.md` - Detailed analysis
 - `docs/TOP_5_OPPORTUNITIES_DECISION_MATRIX.md` - Complete decision matrix
 - `Agents.md` - Development workflow and patterns
