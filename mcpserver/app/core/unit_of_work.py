@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 
-from .repositories import CourseRepository
 from .repository_event import EventRepository
 
 
@@ -8,15 +7,9 @@ class UnitOfWork(ABC):
     """Abstract base class for Unit of Work pattern.
 
     Provides a transactional boundary for repository operations.
-    Implementations must provide concrete repositories (courses, events)
+    Implementations must provide concrete repositories (events)
     and transaction management (commit, rollback).
     """
-
-    @property
-    @abstractmethod
-    def courses(self) -> CourseRepository:
-        """Returns the course repository."""
-        pass
 
     @property
     @abstractmethod

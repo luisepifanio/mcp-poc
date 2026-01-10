@@ -2,11 +2,9 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.repositories import CourseRepository
 from app.core.repository_event import EventRepository
 
 from ...core.unit_of_work import UnitOfWork
-from .repository import AsyncSQLAlchemyCourseRepository
 from .repository_event import AsyncSQLAlchemyEventRepository
 
 logger = logging.getLogger(__name__)
@@ -24,7 +22,6 @@ class AsyncSQLAlchemyUnitOfWork(UnitOfWork):
         """
         self._session: AsyncSession = session
         self._owns_session: bool = owns_session
-        self._courses: CourseRepository | None = None
         self._events: EventRepository | None = None
 
     @property
@@ -33,17 +30,11 @@ class AsyncSQLAlchemyUnitOfWork(UnitOfWork):
         return self._session
 
     @property
-    def courses(self) -> CourseRepository:
-        assert self._courses is not None, "Unit of Work has not been initialized."
-        return self._courses
-
-    @property
     def events(self) -> EventRepository:
         assert self._events is not None, "Unit of Work has not been initialized."
         return self._events
 
     async def __aenter__(self) -> "AsyncSQLAlchemyUnitOfWork":
-        self._courses = AsyncSQLAlchemyCourseRepository(self._session)
         self._events = AsyncSQLAlchemyEventRepository(self._session)
         return self
 
@@ -66,7 +57,6 @@ class AsyncSQLAlchemyUnitOfWork(UnitOfWork):
                     await self._session.close()
                 except Exception as e:
                     logger.warning(f"Error closing session: {e}")
-            self._courses = None
             self._events = None
 
     def _is_session_active(self) -> bool:

@@ -23,6 +23,7 @@ from tenacity import (
 
 from app.core.entities import Event
 from app.core.processors import (
+    BaseProcessorErrorClassifier,
     ErrorType,
     IEventProcessor,
     ProcessorResult,
@@ -40,7 +41,7 @@ except ImportError:  # pragma: no cover - optional dependency
     grpc = None
 
 
-class ApiCallProcessor(IEventProcessor):
+class ApiCallProcessor(IEventProcessor, BaseProcessorErrorClassifier):
     """
     Processor for HTTP/REST API calls.
 
@@ -56,6 +57,11 @@ class ApiCallProcessor(IEventProcessor):
         "timeout": 10  # seconds
     }
     """
+    
+    # Error classification: ValidationError → permanent, Connection/Timeout → transient
+    PERMANENT_EXCEPTIONS = (ValueError,)
+    # httpx errors that are transient (should retry)
+    TRANSIENT_EXCEPTIONS = (httpx.ConnectError, httpx.TimeoutException)
 
     def __init__(self, timeout: float = 30.0, retry_config: RetryConfig | None = None):
         """
@@ -201,7 +207,18 @@ class ApiCallProcessor(IEventProcessor):
 
     def classify_error(self, exc: BaseException) -> ErrorType:
         """
-        Classify API errors for retry strategy.
+        Classify API errors for retry strategy using BaseProcessorErrorClassifier.
+        
+        HTTP-specific logic:
+        - 4xx responses → PERMANENT (raise ValueError)
+        - 5xx responses → TRANSIENT (will retry)
+        - Connection errors → TRANSIENT (via TRANSIENT_EXCEPTIONS)
+        
+        Method resolution order:
+        1. Check PERMANENT_EXCEPTIONS (ValueError)
+        2. Check TRANSIENT_EXCEPTIONS (ConnectError, TimeoutException)
+        3. Check HTTPStatusError response code
+        4. Default to permanent
 
         Args:
             exc: Exception raised during API call
@@ -209,21 +226,25 @@ class ApiCallProcessor(IEventProcessor):
         Returns:
             ErrorType (PERMANENT for 4xx, TRANSIENT for others)
         """
-        if isinstance(exc, ValueError):
-            # Validation errors are permanent
+        # First check permanent exceptions
+        if isinstance(exc, self.PERMANENT_EXCEPTIONS):
             return ErrorType.PERMANENT
+        
+        # Then check transient exceptions
+        if isinstance(exc, self.TRANSIENT_EXCEPTIONS):
+            return ErrorType.TRANSIENT
+        
+        # HTTP Status Error: check response code
         if isinstance(exc, httpx.HTTPStatusError):
-            # 4xx = validation/client error = permanent
-            # 5xx = server error = transient
             if 400 <= exc.response.status_code < 500:
-                return ErrorType.PERMANENT
-            return ErrorType.TRANSIENT
-        if isinstance(exc, (httpx.ConnectError, httpx.TimeoutException)):
-            return ErrorType.TRANSIENT
+                return ErrorType.PERMANENT  # 4xx = client error
+            return ErrorType.TRANSIENT  # 5xx = server error
+        
+        # Default to permanent (safe - don't retry unknown errors)
         return ErrorType.PERMANENT
 
 
-class GrpcProcessor(IEventProcessor):
+class GrpcProcessor(IEventProcessor, BaseProcessorErrorClassifier):
     """
     Processor for gRPC service calls.
 
@@ -241,6 +262,9 @@ class GrpcProcessor(IEventProcessor):
     Note: This is a skeleton. Actual implementation requires
     gRPC channel management and service stubs.
     """
+    
+    # Error classification: validation errors are permanent
+    PERMANENT_EXCEPTIONS = (ValueError,)
 
     def __init__(self, timeout: float = 30.0, retry_config: RetryConfig | None = None):
         """
@@ -323,7 +347,13 @@ class GrpcProcessor(IEventProcessor):
 
     def classify_error(self, exc: BaseException) -> ErrorType:
         """
-        Classify gRPC errors for retry strategy.
+        Classify gRPC errors for retry strategy using BaseProcessorErrorClassifier.
+        
+        gRPC-specific logic:
+        - INVALID_ARGUMENT, NOT_FOUND, PERMISSION_DENIED → PERMANENT
+        - UNAVAILABLE, RESOURCE_EXHAUSTED, DEADLINE_EXCEEDED → TRANSIENT
+        
+        Delegates to parent class for standard cases.
 
         Args:
             exc: Exception raised during gRPC call
@@ -331,9 +361,6 @@ class GrpcProcessor(IEventProcessor):
         Returns:
             ErrorType based on gRPC error code
         """
-        if isinstance(exc, ValueError):
-            return ErrorType.PERMANENT
-
         if grpc is not None and isinstance(exc, grpc.RpcError):
             # Permanent: INVALID_ARGUMENT, NOT_FOUND, PERMISSION_DENIED
             if exc.code() in (
@@ -352,11 +379,11 @@ class GrpcProcessor(IEventProcessor):
             ):
                 return ErrorType.TRANSIENT
 
-        # Default transient for connection errors
-        return ErrorType.TRANSIENT
+        # Delegate to parent for standard cases (ValueError, etc.)
+        return super().classify_error(exc)
 
 
-class LocalUseCaseProcessor(IEventProcessor):
+class LocalUseCaseProcessor(IEventProcessor, BaseProcessorErrorClassifier):
     """
     Processor for local use case execution.
 
@@ -371,6 +398,9 @@ class LocalUseCaseProcessor(IEventProcessor):
 
     Requires: UnitOfWork injection to access use cases.
     """
+    
+    # Error classification: validation errors are permanent
+    PERMANENT_EXCEPTIONS = (ValueError, TypeError)
 
     def __init__(self, uow: Any, retry_config: RetryConfig | None = None):
         """
@@ -446,7 +476,13 @@ class LocalUseCaseProcessor(IEventProcessor):
 
     def classify_error(self, exc: BaseException) -> ErrorType:
         """
-        Classify local use case errors.
+        Classify local use case errors using BaseProcessorErrorClassifier.
+        
+        Local use case-specific logic:
+        - ValidationError, ValueError, TypeError → PERMANENT (bugs)
+        - Connection/TimeoutError → TRANSIENT (infra issues)
+        
+        Delegates to parent class for standard classification.
 
         Args:
             exc: Exception raised during use case execution
@@ -455,13 +491,11 @@ class LocalUseCaseProcessor(IEventProcessor):
             ErrorType based on exception type
         """
         from pydantic import ValidationError
-
-        if isinstance(exc, (ValueError, ValidationError)):
-            return ErrorType.PERMANENT
-
-        # Most infrastructure errors are transient
+        
+        # Local-specific: Connection/Timeout are transient
         if isinstance(exc, (ConnectionError, TimeoutError)):
             return ErrorType.TRANSIENT
 
-        # Default: permanent (safe - avoid unnecessary retries)
-        return ErrorType.PERMANENT
+        # For other cases including ValidationError, delegate to parent
+        # which handles ValueError/TypeError as PERMANENT
+        return super().classify_error(exc)

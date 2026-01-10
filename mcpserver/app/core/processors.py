@@ -3,6 +3,7 @@ Event processor abstractions and types.
 
 This module defines the processor pattern:
 - IEventProcessor: ABC for all event processors
+- BaseProcessorErrorClassifier: Base class for error classification across processors
 - ProcessorResult: Result of processor execution
 - ErrorType: Error classification (TRANSIENT, PERMANENT, RATE_LIMIT)
 - RetryConfig: Retry configuration per processor type
@@ -11,7 +12,7 @@ This module defines the processor pattern:
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 
 class ErrorType(str, Enum):
@@ -51,6 +52,75 @@ class ProcessorResult:
     error: str | None = None  # Error message if failed
     callback_subject: str | None = None  # Redis topic for async callback
     metadata: dict[str, Any] = field(default_factory=dict)  # Processor-specific metadata
+
+
+class BaseProcessorErrorClassifier(ABC):
+    """
+    Base class for error classification across all processor types.
+    
+    This class consolidates error classification logic to avoid duplication
+    across ApiCallProcessor, GrpcProcessor, LocalUseCaseProcessor, etc.
+    
+    Subclasses define PERMANENT_EXCEPTIONS and TRANSIENT_EXCEPTIONS as class
+    variables, and can override _classify_custom() for processor-specific logic.
+    
+    Usage:
+        class MyProcessor(IEventProcessor, BaseProcessorErrorClassifier):
+            PERMANENT_EXCEPTIONS = (ValueError, TypeError)
+            TRANSIENT_EXCEPTIONS = (ConnectionError, TimeoutError)
+            
+            @classmethod
+            def _classify_custom(cls, exc):
+                # Processor-specific classification
+                if isinstance(exc, MyCustomError):
+                    return ErrorType.TRANSIENT
+                return ErrorType.PERMANENT
+    """
+    
+    # Subclasses should override these
+    PERMANENT_EXCEPTIONS: ClassVar[tuple[type[BaseException], ...]] = (ValueError,)
+    TRANSIENT_EXCEPTIONS: ClassVar[tuple[type[BaseException], ...]] = ()
+    
+    @classmethod
+    def classify_error(cls, exc: BaseException) -> ErrorType:
+        """
+        Classify error as PERMANENT or TRANSIENT.
+        
+        Checks permanent exceptions first, then transient, then delegates
+        to subclass _classify_custom() for processor-specific logic.
+        
+        Args:
+            exc: Exception to classify
+            
+        Returns:
+            ErrorType (PERMANENT or TRANSIENT)
+        """
+        # Check permanent exceptions first
+        if isinstance(exc, cls.PERMANENT_EXCEPTIONS):
+            return ErrorType.PERMANENT
+        
+        # Check transient exceptions
+        if isinstance(exc, cls.TRANSIENT_EXCEPTIONS):
+            return ErrorType.TRANSIENT
+        
+        # Delegate to subclass for custom logic
+        return cls._classify_custom(exc)
+    
+    @classmethod
+    def _classify_custom(cls, exc: BaseException) -> ErrorType:
+        """
+        Override in subclass for processor-specific error classification.
+        
+        Default: classify as PERMANENT (safe default - don't retry unknown errors).
+        
+        Args:
+            exc: Exception to classify
+            
+        Returns:
+            ErrorType (PERMANENT or TRANSIENT)
+        """
+        return ErrorType.PERMANENT
+
 
 
 class IEventProcessor(ABC):
