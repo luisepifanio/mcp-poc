@@ -57,14 +57,16 @@ class ApiCallProcessor(IEventProcessor):
     }
     """
 
-    def __init__(self, timeout: float = 30.0):
+    def __init__(self, timeout: float = 30.0, retry_config: RetryConfig | None = None):
         """
         Initialize API processor.
 
         Args:
             timeout: Default timeout for HTTP requests (seconds)
+            retry_config: Optional retry configuration (for testing)
         """
         self.timeout = timeout
+        self._retry_config = retry_config
         self.logger = logger
 
     async def process(self, event: Event) -> ProcessorResult:
@@ -182,7 +184,12 @@ class ApiCallProcessor(IEventProcessor):
         - 2x fast retries at 100ms (covers ~200ms)
         - 3x exponential backoff: 500ms, 1s, 2s
         - Total p95: ~1700ms
+
+        Returns injected config if provided, else production defaults.
         """
+        if self._retry_config is not None:
+            return self._retry_config
+
         return RetryConfig(
             max_attempts=5,
             initial_backoff=0.5,  # 500ms
@@ -235,14 +242,16 @@ class GrpcProcessor(IEventProcessor):
     gRPC channel management and service stubs.
     """
 
-    def __init__(self, timeout: float = 30.0):
+    def __init__(self, timeout: float = 30.0, retry_config: RetryConfig | None = None):
         """
         Initialize gRPC processor.
 
         Args:
             timeout: Default timeout for gRPC calls (seconds)
+            retry_config: Optional retry configuration (for testing)
         """
         self.timeout = timeout
+        self._retry_config = retry_config
         self.logger = logger
 
     async def process(self, event: Event) -> ProcessorResult:
@@ -297,7 +306,12 @@ class GrpcProcessor(IEventProcessor):
         Retry strategy for gRPC calls.
 
         Similar to API but slightly faster (gRPC overhead less).
+
+        Returns injected config if provided, else production defaults.
         """
+        if self._retry_config is not None:
+            return self._retry_config
+
         return RetryConfig(
             max_attempts=5,
             initial_backoff=0.3,  # 300ms (faster than API)
@@ -358,14 +372,16 @@ class LocalUseCaseProcessor(IEventProcessor):
     Requires: UnitOfWork injection to access use cases.
     """
 
-    def __init__(self, uow: Any):
+    def __init__(self, uow: Any, retry_config: RetryConfig | None = None):
         """
         Initialize local use case processor.
 
         Args:
             uow: IUnitOfWork instance for use case execution
+            retry_config: Optional retry configuration (for testing)
         """
         self.uow = uow
+        self._retry_config = retry_config
         self.logger = logger
 
     async def process(self, event: Event) -> ProcessorResult:
@@ -413,7 +429,12 @@ class LocalUseCaseProcessor(IEventProcessor):
         Retry strategy for local use cases.
 
         Fast - local execution should be quick.
+
+        Returns injected config if provided, else production defaults.
         """
+        if self._retry_config is not None:
+            return self._retry_config
+
         return RetryConfig(
             max_attempts=3,
             initial_backoff=0.2,  # 200ms

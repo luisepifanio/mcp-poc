@@ -13,11 +13,11 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from result import Err, Ok
 
 from app.core.entities import Event, EventState
 from app.core.processors import ErrorType, ProcessorResultStatus
 from app.infrastructure.processors.sync_processors import ApiCallProcessor
+from tests.unit.conftest import FAST_TEST_RETRY_CONFIG
 
 # ===== ApiCallProcessor Error Tests =====
 
@@ -30,7 +30,7 @@ async def test_api_processor_http_400_permanent_error():
     ✅ FIXED: AsyncRetrying now uses retry_if_not_exception_type(ValueError)
     to prevent retrying PERMANENT errors (ValueError from 4xx HTTP responses).
     """
-    processor = ApiCallProcessor(timeout=5.0)
+    processor = ApiCallProcessor(timeout=5.0, retry_config=FAST_TEST_RETRY_CONFIG)
 
     event = Event(
         id=uuid4(),
@@ -71,7 +71,7 @@ async def test_api_processor_http_400_permanent_error():
 @pytest.mark.asyncio
 async def test_api_processor_http_503_transient_retries():
     """HTTP 5xx errors should retry (TRANSIENT)."""
-    processor = ApiCallProcessor(timeout=5.0)
+    processor = ApiCallProcessor(timeout=5.0, retry_config=FAST_TEST_RETRY_CONFIG)
 
     event = Event(
         id=uuid4(),
@@ -127,7 +127,7 @@ async def test_api_processor_http_503_transient_retries():
 @pytest.mark.asyncio
 async def test_api_processor_timeout_transient():
     """Timeout errors should be classified as TRANSIENT (retryable)."""
-    processor = ApiCallProcessor(timeout=1.0)
+    processor = ApiCallProcessor(timeout=1.0, retry_config=FAST_TEST_RETRY_CONFIG)
 
     event = Event(
         id=uuid4(),
@@ -155,14 +155,14 @@ async def test_api_processor_timeout_transient():
         with pytest.raises(httpx.TimeoutException):
             await processor.process(event)
 
-        # Should attempt multiple times (max_attempts = 5)
-        assert mock_client.request.call_count == 5
+        # Should attempt multiple times (max_attempts = 3 with FAST_TEST_RETRY_CONFIG)
+        assert mock_client.request.call_count == 3
 
 
 @pytest.mark.asyncio
 async def test_api_processor_invalid_method_validation():
     """Invalid HTTP method should raise ValueError immediately."""
-    processor = ApiCallProcessor()
+    processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
     event = Event(
         id=uuid4(),
@@ -182,7 +182,7 @@ async def test_api_processor_invalid_method_validation():
 @pytest.mark.asyncio
 async def test_api_processor_missing_url_validation():
     """Missing URL should raise ValueError immediately."""
-    processor = ApiCallProcessor()
+    processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
     event = Event(
         id=uuid4(),
@@ -202,7 +202,7 @@ async def test_api_processor_missing_url_validation():
 @pytest.mark.asyncio
 async def test_api_processor_classify_error_permanent():
     """Test error classification for PERMANENT errors."""
-    processor = ApiCallProcessor()
+    processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
     # ValueError (from 4xx) should be PERMANENT
     exc = ValueError("HTTP 404: Not Found")
@@ -216,7 +216,7 @@ async def test_api_processor_classify_error_permanent():
 @pytest.mark.asyncio
 async def test_api_processor_classify_error_transient():
     """Test error classification for TRANSIENT errors."""
-    processor = ApiCallProcessor()
+    processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
     # HTTPStatusError (5xx) should be TRANSIENT
     mock_response = MagicMock()
@@ -239,12 +239,12 @@ async def test_api_processor_classify_error_transient():
 
 @pytest.mark.asyncio
 async def test_api_processor_retry_config():
-    """Test retry configuration returns expected values."""
-    processor = ApiCallProcessor()
+    """Test retry configuration returns expected values (production defaults)."""
+    processor = ApiCallProcessor()  # No fast config - test production defaults
 
     config = processor.get_retry_config()
 
-    # Verify retry configuration
+    # Verify production retry configuration
     assert config.max_attempts == 5
     assert config.initial_backoff == 0.5  # 500ms
     assert config.max_backoff == 2.0  # 2s
@@ -256,7 +256,7 @@ async def test_api_processor_retry_config():
 @pytest.mark.asyncio
 async def test_api_processor_retry_exhaustion():
     """Test behavior when all retries are exhausted."""
-    processor = ApiCallProcessor(timeout=1.0)
+    processor = ApiCallProcessor(timeout=1.0, retry_config=FAST_TEST_RETRY_CONFIG)
 
     event = Event(
         id=uuid4(),
@@ -290,8 +290,8 @@ async def test_api_processor_retry_exhaustion():
         with pytest.raises(httpx.HTTPStatusError):
             await processor.process(event)
 
-        # Should have attempted max_attempts times
-        assert mock_client.request.call_count == 5
+        # Should have attempted max_attempts times (3 with FAST_TEST_RETRY_CONFIG)
+        assert mock_client.request.call_count == 3
 
 
 # ===== Additional Coverage Tests =====
@@ -300,7 +300,7 @@ async def test_api_processor_retry_exhaustion():
 @pytest.mark.asyncio
 async def test_api_processor_success_with_empty_response():
     """Test successful API call with empty response body."""
-    processor = ApiCallProcessor()
+    processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
     event = Event(
         id=uuid4(),
@@ -338,7 +338,7 @@ async def test_api_processor_success_with_empty_response():
 @pytest.mark.asyncio
 async def test_api_processor_custom_headers():
     """Test API call with custom headers."""
-    processor = ApiCallProcessor()
+    processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
     event = Event(
         id=uuid4(),

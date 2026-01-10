@@ -23,6 +23,7 @@ from app.infrastructure.processors.sync_processors import (
     GrpcProcessor,
     LocalUseCaseProcessor,
 )
+from tests.unit.conftest import FAST_TEST_RETRY_CONFIG
 
 # ============================================================================
 # ApiCallProcessor Tests
@@ -30,13 +31,13 @@ from app.infrastructure.processors.sync_processors import (
 
 
 @pytest.fixture
-def api_processor():
-    """Fixture: ApiCallProcessor instance"""
-    return ApiCallProcessor(timeout=10.0)
+def api_processor() -> ApiCallProcessor:
+    """Fixture: ApiCallProcessor instance with fast retry config"""
+    return ApiCallProcessor(timeout=10.0, retry_config=FAST_TEST_RETRY_CONFIG)
 
 
 @pytest.fixture
-def api_event():
+def api_event() -> Event:
     """Fixture: Event with API call payload"""
     return Event(
         id=uuid4(),
@@ -53,7 +54,9 @@ def api_event():
 
 
 @pytest.mark.asyncio
-async def test_api_processor_success(api_processor, api_event):
+async def test_api_processor_success(
+    api_processor: ApiCallProcessor, api_event: Event
+) -> None:
     """Test: Successful API call returns SUCCESS result"""
     # Mock successful HTTP response
     mock_response = MagicMock()
@@ -78,7 +81,7 @@ async def test_api_processor_success(api_processor, api_event):
 
 
 @pytest.mark.asyncio
-async def test_api_processor_missing_url(api_processor):
+async def test_api_processor_missing_url(api_processor: ApiCallProcessor) -> None:
     """Test: Missing 'url' in payload raises ValueError"""
     event = Event(
         id=uuid4(),
@@ -95,7 +98,7 @@ async def test_api_processor_missing_url(api_processor):
 
 
 @pytest.mark.asyncio
-async def test_api_processor_invalid_method(api_processor):
+async def test_api_processor_invalid_method(api_processor: ApiCallProcessor) -> None:
     """Test: Invalid HTTP method raises ValueError"""
     event = Event(
         id=uuid4(),
@@ -112,7 +115,9 @@ async def test_api_processor_invalid_method(api_processor):
 
 
 @pytest.mark.asyncio
-async def test_api_processor_4xx_error(api_processor, api_event):
+async def test_api_processor_4xx_error(
+    api_processor: ApiCallProcessor, api_event: Event
+) -> None:
     """Test: 4xx error (validation) raises ValueError (PERMANENT)"""
     # 400 = client error = permanent
     mock_response = MagicMock()
@@ -133,7 +138,9 @@ async def test_api_processor_4xx_error(api_processor, api_event):
 
 
 @pytest.mark.asyncio
-async def test_api_processor_5xx_error_with_retries(api_processor, api_event):
+async def test_api_processor_5xx_error_with_retries(
+    api_processor: ApiCallProcessor, api_event: Event
+) -> None:
     """Test: 5xx error triggers retries (TRANSIENT)"""
     # 500 = server error = transient = should retry
     mock_response = MagicMock()
@@ -154,7 +161,9 @@ async def test_api_processor_5xx_error_with_retries(api_processor, api_event):
 
 
 @pytest.mark.asyncio
-async def test_api_processor_timeout(api_processor, api_event):
+async def test_api_processor_timeout(
+    api_processor: ApiCallProcessor, api_event: Event
+) -> None:
     """Test: Timeout error (TRANSIENT) triggers retries"""
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
@@ -168,7 +177,9 @@ async def test_api_processor_timeout(api_processor, api_event):
 
 
 @pytest.mark.asyncio
-async def test_api_processor_connection_error(api_processor, api_event):
+async def test_api_processor_connection_error(
+    api_processor: ApiCallProcessor, api_event: Event
+) -> None:
     """Test: Connection error (TRANSIENT) triggers retries"""
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
@@ -181,28 +192,28 @@ async def test_api_processor_connection_error(api_processor, api_event):
             await api_processor.process(api_event)
 
 
-def test_api_processor_get_retry_config(api_processor):
+def test_api_processor_get_retry_config(api_processor: ApiCallProcessor) -> None:
     """Test: Retry config has correct values"""
     config = api_processor.get_retry_config()
 
-    assert config.max_attempts == 5
-    assert config.initial_backoff == 0.5  # 500ms
-    assert config.max_backoff == 2.0
-    assert config.backoff_multiplier == 2.0
-    assert config.fast_retry_count == 2
-    assert config.fast_retry_delay == 0.1
+    assert config.max_attempts == FAST_TEST_RETRY_CONFIG.max_attempts
+    assert config.initial_backoff == FAST_TEST_RETRY_CONFIG.initial_backoff
+    assert config.max_backoff == FAST_TEST_RETRY_CONFIG.max_backoff
+    assert config.backoff_multiplier == FAST_TEST_RETRY_CONFIG.backoff_multiplier
+    assert config.fast_retry_count == FAST_TEST_RETRY_CONFIG.fast_retry_count
+    assert config.fast_retry_delay == FAST_TEST_RETRY_CONFIG.fast_retry_delay
 
 
-def test_api_processor_classify_error_permanent():
+def test_api_processor_classify_error_permanent() -> None:
     """Test: ValueError classified as PERMANENT"""
-    processor = ApiCallProcessor()
+    processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
     error = ValueError("Invalid request")
     assert processor.classify_error(error) == ErrorType.PERMANENT
 
 
-def test_api_processor_classify_error_4xx():
+def test_api_processor_classify_error_4xx() -> None:
     """Test: 4xx HTTP error classified as PERMANENT"""
-    processor = ApiCallProcessor()
+    processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
     mock_response = MagicMock()
     mock_response.status_code = 404
     error = httpx.HTTPStatusError(
@@ -211,9 +222,9 @@ def test_api_processor_classify_error_4xx():
     assert processor.classify_error(error) == ErrorType.PERMANENT
 
 
-def test_api_processor_classify_error_5xx():
+def test_api_processor_classify_error_5xx() -> None:
     """Test: 5xx HTTP error classified as TRANSIENT"""
-    processor = ApiCallProcessor()
+    processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
     mock_response = MagicMock()
     mock_response.status_code = 502
     error = httpx.HTTPStatusError(
@@ -222,16 +233,16 @@ def test_api_processor_classify_error_5xx():
     assert processor.classify_error(error) == ErrorType.TRANSIENT
 
 
-def test_api_processor_classify_error_connection():
+def test_api_processor_classify_error_connection() -> None:
     """Test: Connection errors classified as TRANSIENT"""
-    processor = ApiCallProcessor()
+    processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
     error = httpx.ConnectError("Cannot connect")
     assert processor.classify_error(error) == ErrorType.TRANSIENT
 
 
-def test_api_processor_classify_error_timeout():
+def test_api_processor_classify_error_timeout() -> None:
     """Test: Timeout errors classified as TRANSIENT"""
-    processor = ApiCallProcessor()
+    processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
     error = httpx.TimeoutException("Request timeout")
     assert processor.classify_error(error) == ErrorType.TRANSIENT
 
@@ -242,13 +253,13 @@ def test_api_processor_classify_error_timeout():
 
 
 @pytest.fixture
-def grpc_processor():
-    """Fixture: GrpcProcessor instance"""
-    return GrpcProcessor(timeout=10.0)
+def grpc_processor() -> GrpcProcessor:
+    """Fixture: GrpcProcessor instance with fast retry config"""
+    return GrpcProcessor(timeout=10.0, retry_config=FAST_TEST_RETRY_CONFIG)
 
 
 @pytest.fixture
-def grpc_event():
+def grpc_event() -> Event:
     """Fixture: Event with gRPC call payload"""
     return Event(
         id=uuid4(),
@@ -265,7 +276,7 @@ def grpc_event():
 
 
 @pytest.mark.asyncio
-async def test_grpc_processor_missing_service(grpc_processor):
+async def test_grpc_processor_missing_service(grpc_processor: GrpcProcessor) -> None:
     """Test: Missing service raises ValueError"""
     event = Event(
         id=uuid4(),
@@ -279,7 +290,7 @@ async def test_grpc_processor_missing_service(grpc_processor):
 
 
 @pytest.mark.asyncio
-async def test_grpc_processor_missing_method(grpc_processor):
+async def test_grpc_processor_missing_method(grpc_processor: GrpcProcessor) -> None:
     """Test: Missing method raises ValueError"""
     event = Event(
         id=uuid4(),
@@ -293,25 +304,28 @@ async def test_grpc_processor_missing_method(grpc_processor):
 
 
 @pytest.mark.asyncio
-async def test_grpc_processor_not_implemented(grpc_processor, grpc_event):
+async def test_grpc_processor_not_implemented(
+    grpc_processor: GrpcProcessor, grpc_event: Event
+) -> None:
     """Test: gRPC execution raises NotImplementedError"""
     with pytest.raises(NotImplementedError, match="gRPC processor requires"):
         await grpc_processor.process(grpc_event)
 
 
-def test_grpc_processor_get_retry_config(grpc_processor):
-    """Test: Retry config optimized for gRPC"""
+def test_grpc_processor_get_retry_config(grpc_processor: GrpcProcessor) -> None:
+    """Test: Retry config with fast test config (injected)"""
     config = grpc_processor.get_retry_config()
 
-    assert config.max_attempts == 5
-    assert config.initial_backoff == 0.3  # 300ms
-    assert config.max_backoff == 2.0
-    assert config.fast_retry_delay == 0.05  # 50ms
+    # Using injected FAST_TEST_RETRY_CONFIG
+    assert config.max_attempts == FAST_TEST_RETRY_CONFIG.max_attempts
+    assert config.initial_backoff == FAST_TEST_RETRY_CONFIG.initial_backoff
+    assert config.max_backoff == FAST_TEST_RETRY_CONFIG.max_backoff
+    assert config.fast_retry_delay == FAST_TEST_RETRY_CONFIG.fast_retry_delay
 
 
-def test_grpc_processor_classify_error_permanent():
+def test_grpc_processor_classify_error_permanent() -> None:
     """Test: ValueError classified as PERMANENT"""
-    processor = GrpcProcessor()
+    processor = GrpcProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
     error = ValueError("Invalid request")
     assert processor.classify_error(error) == ErrorType.PERMANENT
 
@@ -322,14 +336,14 @@ def test_grpc_processor_classify_error_permanent():
 
 
 @pytest.fixture
-def local_usecase_processor():
-    """Fixture: LocalUseCaseProcessor instance"""
+def local_usecase_processor() -> LocalUseCaseProcessor:
+    """Fixture: LocalUseCaseProcessor instance with fast retry config"""
     uow_mock = MagicMock()
-    return LocalUseCaseProcessor(uow=uow_mock)
+    return LocalUseCaseProcessor(uow=uow_mock, retry_config=FAST_TEST_RETRY_CONFIG)
 
 
 @pytest.fixture
-def local_usecase_event():
+def local_usecase_event() -> Event:
     """Fixture: Event with local use case payload"""
     return Event(
         id=uuid4(),
@@ -343,7 +357,9 @@ def local_usecase_event():
 
 
 @pytest.mark.asyncio
-async def test_local_usecase_processor_missing_name(local_usecase_processor):
+async def test_local_usecase_processor_missing_name(
+    local_usecase_processor: LocalUseCaseProcessor,
+) -> None:
     """Test: Missing use_case_name raises ValueError"""
     event = Event(
         id=uuid4(),
@@ -358,41 +374,49 @@ async def test_local_usecase_processor_missing_name(local_usecase_processor):
 
 @pytest.mark.asyncio
 async def test_local_usecase_processor_not_implemented(
-    local_usecase_processor, local_usecase_event
-):
+    local_usecase_processor: LocalUseCaseProcessor, local_usecase_event: Event
+) -> None:
     """Test: Local use case execution raises NotImplementedError"""
     with pytest.raises(NotImplementedError, match="Local use case"):
         await local_usecase_processor.process(local_usecase_event)
 
 
-def test_local_usecase_processor_get_retry_config(local_usecase_processor):
+def test_local_usecase_processor_get_retry_config(
+    local_usecase_processor: LocalUseCaseProcessor,
+) -> None:
     """Test: Retry config optimized for local execution"""
     config = local_usecase_processor.get_retry_config()
 
-    assert config.max_attempts == 3
-    assert config.initial_backoff == 0.2  # 200ms
-    assert config.max_backoff == 2.0
-    assert config.fast_retry_count == 1
-    assert config.fast_retry_delay == 0.05
+    assert config.max_attempts == FAST_TEST_RETRY_CONFIG.max_attempts
+    assert config.initial_backoff == FAST_TEST_RETRY_CONFIG.initial_backoff
+    assert config.max_backoff == FAST_TEST_RETRY_CONFIG.max_backoff
+    assert config.fast_retry_count == FAST_TEST_RETRY_CONFIG.fast_retry_count
+    assert config.fast_retry_delay == FAST_TEST_RETRY_CONFIG.fast_retry_delay
 
 
-def test_local_usecase_processor_classify_error_permanent():
+def test_local_usecase_processor_classify_error_permanent() -> None:
     """Test: ValueError classified as PERMANENT"""
-    processor = LocalUseCaseProcessor(uow=MagicMock())
+    processor = LocalUseCaseProcessor(
+        uow=MagicMock(), retry_config=FAST_TEST_RETRY_CONFIG
+    )
     error = ValueError("Invalid input")
     assert processor.classify_error(error) == ErrorType.PERMANENT
 
 
-def test_local_usecase_processor_classify_error_connection():
+def test_local_usecase_processor_classify_error_connection() -> None:
     """Test: Connection errors classified as TRANSIENT"""
-    processor = LocalUseCaseProcessor(uow=MagicMock())
+    processor = LocalUseCaseProcessor(
+        uow=MagicMock(), retry_config=FAST_TEST_RETRY_CONFIG
+    )
     error = ConnectionError("Cannot connect to DB")
     assert processor.classify_error(error) == ErrorType.TRANSIENT
 
 
-def test_local_usecase_processor_classify_error_timeout():
+def test_local_usecase_processor_classify_error_timeout() -> None:
     """Test: Timeout errors classified as TRANSIENT"""
-    processor = LocalUseCaseProcessor(uow=MagicMock())
+    processor = LocalUseCaseProcessor(
+        uow=MagicMock(), retry_config=FAST_TEST_RETRY_CONFIG
+    )
     error = TimeoutError("Request timeout")
     assert processor.classify_error(error) == ErrorType.TRANSIENT
 
@@ -402,7 +426,7 @@ def test_local_usecase_processor_classify_error_timeout():
 # ============================================================================
 
 
-def test_api_processor_faster_than_grpc():
+def test_api_processor_faster_than_grpc() -> None:
     """Test: API processor has slower retries than gRPC (API has more backoff)"""
     api_config = ApiCallProcessor().get_retry_config()
     grpc_config = GrpcProcessor().get_retry_config()
@@ -411,7 +435,7 @@ def test_api_processor_faster_than_grpc():
     assert api_config.initial_backoff > grpc_config.initial_backoff
 
 
-def test_local_processor_fastest():
+def test_local_processor_fastest() -> None:
     """Test: Local processor has fastest retries (local execution is quick)"""
     local_config = LocalUseCaseProcessor(uow=MagicMock()).get_retry_config()
     api_config = ApiCallProcessor().get_retry_config()

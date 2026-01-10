@@ -4,8 +4,6 @@ from datetime import UTC, datetime
 from enum import Enum
 from uuid import UUID
 
-import pytest
-
 from app.infrastructure.db.models.default import (
     AuditableBase,
     UUIDBase,

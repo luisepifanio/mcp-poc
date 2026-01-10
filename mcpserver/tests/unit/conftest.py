@@ -1,8 +1,21 @@
-import sys
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from app.core.processors import RetryConfig
+
+# Fast retry config for tests (56x faster than production defaults)
+# Timeline: Attempt 1 (0ms) → Attempt 2 (10ms) → Attempt 3 (20ms) = ~30ms total
+# vs Production: ~1700ms
+FAST_TEST_RETRY_CONFIG = RetryConfig(
+    max_attempts=3,  # Less attempts for speed
+    initial_backoff=0.01,  # 10ms (100x faster)
+    max_backoff=0.05,  # 50ms (40x faster)
+    backoff_multiplier=2.0,  # Same ratio
+    fast_retry_count=1,  # Only 1 fast retry
+    fast_retry_delay=0.01,  # 10ms (10x faster)
+)
 
 
 @pytest.fixture

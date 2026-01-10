@@ -35,7 +35,7 @@ async def test_startup_handler_with_broker_not_connected() -> None:
     broker.connect = AsyncMock()
 
     # Simulate startup function logic
-    context = MagicMock()
+    MagicMock()
     if broker._connection is None:
         await broker.connect()
 
@@ -57,7 +57,7 @@ async def test_startup_handler_with_broker_already_connected() -> None:
     broker.connect = AsyncMock()
 
     # Simulate startup function logic
-    context = MagicMock()
+    MagicMock()
     if broker._connection is None:
         await broker.connect()
 
@@ -80,7 +80,6 @@ async def test_subscriber_demo_handler_acks_on_success() -> None:
     msg.ack = AsyncMock()
     msg.nack = AsyncMock()
 
-    body = {"message": "Hi there from /ping endpoint"}
 
     # Simulate subscriber_demo function logic
     try:
@@ -104,7 +103,6 @@ async def test_subscriber_demo_handler_nacks_on_ack_exception() -> None:
     msg.ack = AsyncMock(side_effect=Exception("connection lost"))
     msg.nack = AsyncMock()
 
-    body = {"message": "Hi there"}
 
     # Simulate subscriber_demo function logic
     try:
@@ -286,11 +284,11 @@ async def test_handle_processing_event_queue_nacks_on_exception() -> None:
     # Simulate handle_processing_event_queue function logic
     try:
         async with uow_mock:
-            event_result = await uow_mock.events.getOne(body.id)
+            await uow_mock.events.getOne(body.id)
         await msg.ack()
     except Exception as e:
         await msg.nack()
-        response = {"error": "handler_error", "detail": str(e)}
+        {"error": "handler_error", "detail": str(e)}
 
     msg.nack.assert_awaited_once()
     msg.ack.assert_not_awaited()

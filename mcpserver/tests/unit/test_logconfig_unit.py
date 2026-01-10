@@ -1,10 +1,7 @@
 """Unit tests for logging configuration module."""
 
-import logging
 import os
 from unittest.mock import patch
-
-import pytest
 
 
 def test_logconfig_imports_successfully():
