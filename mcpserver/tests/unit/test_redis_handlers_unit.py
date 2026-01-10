@@ -100,50 +100,35 @@ async def test_handle_processing_event_queue_ack_on_success() -> None:
         uow_mock.__aexit__.return_value = None
         uow_mock.events.getOne = AsyncMock(return_value=Ok(test_event))
 
-        with patch("app.infrastructure.redis.main.processor_registry") as registry_mock:
-            processor_mock = MagicMock()
-            processor_mock.get_retry_config.return_value = MagicMock(
-                max_attempts=1,
-                initial_backoff=0.0,
-                max_backoff=0.0,
-                backoff_multiplier=1.0,
-            )
-            processor_mock.process = AsyncMock(
-                return_value=MagicMock(
-                    status=MagicMock(value="success"), data={"result": "ok"}
-                )
-            )
-            registry_mock.get.return_value = processor_mock
-
-            with patch(
-                "app.infrastructure.redis.main.ProcessEventIdealUseCase"
-            ) as usecase_mock_class:
-                usecase_mock = MagicMock()
-                usecase_mock.execute = AsyncMock(
-                    return_value=Ok(
-                        EnqueuedEventUseCaseOutput(
-                            id=test_event.id,
-                            name="test_event",
-                            payload=test_event.payload,
-                            state=EventState.COMPLETED,
-                        )
+        with patch(
+            "app.infrastructure.redis.main.ProcessEventIdealUseCase"
+        ) as usecase_mock_class:
+            usecase_mock = MagicMock()
+            usecase_mock.execute = AsyncMock(
+                return_value=Ok(
+                    EnqueuedEventUseCaseOutput(
+                        id=test_event.id,
+                        name="test_event",
+                        payload=test_event.payload,
+                        state=EventState.COMPLETED,
                     )
                 )
-                usecase_mock_class.return_value = usecase_mock
-                uow_mock_class.return_value = uow_mock
+            )
+            usecase_mock_class.return_value = usecase_mock
+            uow_mock_class.return_value = uow_mock
 
-                body = EnqueuedEventUseCaseOutput(
-                    id=test_event.id,
-                    name="test_event",
-                    payload={"test": "data"},
-                    state=EventState.PENDING,
-                )
+            body = EnqueuedEventUseCaseOutput(
+                id=test_event.id,
+                name="test_event",
+                payload={"test": "data"},
+                state=EventState.PENDING,
+            )
 
-                result = await handle_processing_event_queue(body, msg, session_mock)
+            result = await handle_processing_event_queue(body, msg, session_mock)
 
-                msg.ack.assert_awaited_once()
-                msg.nack.assert_not_awaited()
-                assert isinstance(result, dict)
+            msg.ack.assert_awaited_once()
+            msg.nack.assert_not_awaited()
+            assert isinstance(result, dict)
 
 
 @pytest.mark.asyncio
