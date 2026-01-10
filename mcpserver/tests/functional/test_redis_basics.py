@@ -4,19 +4,17 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from faststream.redis import TestApp, TestRedisBroker
+from faststream.redis import TestRedisBroker
 
 from app.core.usecases.event_usecases import EnqueuedEventUseCaseInput
 
 # Skip this entire module due to AsyncEngine(sqlite) incompatibility
 # These tests need aiosqlite driver configured or a real Redis instance
-pytest.skip(
-    reason="Redis functional tests skipped - requires aiosqlite or external Redis",
-    allow_module_level=True,
-)
-
+# pytest.skip(
+#     reason="Redis functional tests skipped - requires aiosqlite or external Redis",
+#     allow_module_level=True,
+# )
 from app.infrastructure.redis.main import (
-    app,
     broker,
     handle_enqueue_event,
     subscriber_demo,
@@ -30,7 +28,7 @@ async def test_redis_demo_subscriber() -> None:
     """Tests the full message flow using the in-memory TestRedisBroker."""
 
     # Use TestApp and TestRedisBroker as context managers
-    async with TestRedisBroker(broker) as test_broker, TestApp(app):
+    async with TestRedisBroker(broker) as test_broker:
         # The broker here is an in-memory patched version
         # test_broker: TestRedisBroker = test_app.broker # type: ignore
 
