@@ -1,0 +1,191 @@
+## 🎭 Rol
+
+Asume el rol de un Arquitecto de Sistemas Senior con experiencia en infra, devops y kubernetes.
+Tu enfoque está en transformar necesidades de negocio en soluciones tecnológicas eficientes, sustentables, extensibles y escalables.
+
+> Experiencia esperada: desarrollo multiplataforma (web, móvil), trabajo en entornos monorepo, diseño técnico colaborativo con UX, producto y stakeholders.
+> Tu misión es desarrollar una solución técnica concisa y eficiente/minimalista que se adapte a un proyecto monorepo y sirva como base arquitectónica extensible.
+
+## 📌 Instrucciones Generales
+
+- Proporciona una solución técnica clara y accionable.
+- Asegúrate de que la propuesta sea aplicable bajo los criterios de KISS ( Keep It Simple and Stupid ) y S.O.L.I.D
+- De necesitar modularizar la solución esta sera bajo Clean / Hexagonal Architecture
+- La respuesta debe contener razonamiento técnico, diagramas, y formatos reutilizables.
+- La solución debe cumplir con estas características clave:
+  - Concisa: Mínimos pasos para ejecución y de baja carga cognitiva
+  - Sustentable: Bajo mantenimiento.
+  - Extensible: Fácil integración de nuevas features.
+
+## 🌟 Principios del Monorepo
+
+1. **Independencia de proyectos**: Cada proyecto tiene su `pyproject.toml`/ `package.json`/ segun aplique en su lenguaje/framework, Entorno vrtual (.venv / node_modules / etc ), y ciclo de vida
+2. **Documentación distribuida**: `Agents.md` global + uno específicos por proyecto y scope
+3. **Testing aislado**: Tests se ejecutan por proyecto, no globalmente (a menos que sea CI global de monorepo/turborepo)
+4. **Deployment unificado**: Tilt orquesta todo, pero cada servicio es deployable independientemente
+5. **Clean Architecture**: Todos los proyectos por tecnologia/lenguaje (Ej: Python + FastApi) siguen el mismo patrón arquitectónico
+6. **Pricipios de Diseño**: Las guias de implementacion son independientes del lenguaje
+
+- SOLID
+- KISS
+- Minimalismo: Lo que NO está NO falla
+
+6. **Type safety**:
+
+- mypy strict mode obligatorio y ruf checks en python
+- eslint y Typescript para proyectos NODE.js
+- A futuro pueden incluirse otros lenguajes ej: Rust / GoLang
+
+7. **Linting estricto**:
+
+- Ruff con reglas comunes en todos los proyectos
+- ESLint en typescript
+
+8. **Diagramas en Mermaid**: Todos los diagramas y flujos deben escribirse en Mermaid.
+
+## 🧩 Contexto
+
+Para orquestar la infraestructura actualmente utilizamos [Tilt](https://https://tilt.dev) y TiltFile
+Para administrar el monorepo usamos [turborepo](https://turborepo.com)
+Buscamos desarrollar un propuesta de CI/CD ( Cntinous Integration & Continous Delivery ) costo efectiva de baja carga cognitiva pero efectiva.
+
+- https://turborepo.com/docs/guides/ci-vendors
+- https://turborepo.com/docs/guides/ci-vendors/github-actions
+- https://turborepo.com/docs/guides/tools/docker
+- https://docs.tilt.dev/ci.html
+- https://docs.tilt.dev/example_python.html#ci
+- https://github.com/tilt-dev/tilt-example-python/tree/master/3-recommended
+- https://github.com/tilt-dev/kind-local/blob/master/.circleci/with-kind-cluster.sh
+
+## 📊 Diagrama de soporte
+
+El Pipeline de referencia de integracion continua es
+
+```mermaid
+graph TD
+    subgraph CodePhase[CI/CD Pipeline]
+        A[SCM Change or Manual Trigger] --> B(CheckOut Code);
+        B --> C[Build Project & Tooling];
+        C --> D[Testing];
+        D --> E[Unit Testing];
+        D --> F[Integration Testing];
+        D --> G[Functional Testing];
+        E --> H{Tests passed?};
+        F --> H;
+        G --> H;
+        H --> I[Build & Publish Images];
+        I --> J[Setup Staging Tilt Environment]
+        J --> K[Run E2E Tests - Cypress.io]
+        K --> LL[Store Result];
+        LL --> M{E2E passed?}
+        M -.->|No, Try Again| MM[Tag Build metadata 1.0.1-**286f-failed** ];
+    end
+
+
+    subgraph ReleasePhase[Release Actions]
+        M -- "Yes!" --> N{Marked for Deployment?};
+        N -.->|No, Try Again| NN[Bye!];
+        N -- "Yes!" --> O[Tag/Version Affected Components];
+        O --> P[Trigger Production Deployment]
+    end
+
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style F fill:#ccf,stroke:#333,stroke-width:2px
+    style G fill:#ccf,stroke:#333,stroke-width:2px
+```
+
+## 📝 Tarea
+
+### 🟡 **Objetivo Principal:**
+
+En base al Contexto y Links de referrnecia, `Definir un pipeline de CI/CD para las apps python y  node.js que existan en el monorepo, usando target principal GitHub Actions` definiendo y proponiendo si la etapa `Testing` queda a
+crago de `turborepo` y `Run E2E Tests` a cargo de Tilt.
+La propuesta debe ser incrmental enfocandose en conseguir la fase `CodePhase`
+
+### 🟢 **Objetivos Secundarios:**
+
+- `Propuesta del mismo pipeline para otros providers i.e GitLab` en caso de tener mejor soporte
+- `La propuesta debe ser cosot efectiva` Establecemos un idel de maximo 5 minutos de ejecucion
+  para el pipeline completo, aqui puede ser de gran ayuda turbo repo paralelizando
+- Puede utilizar mi ultima investigacion adjunta como base `demo.md`, Analizala, Optimizala y Escala hacia una solución superadora
+
+## 🔧 Requisitos No Funcionales
+
+| Criterio.      |        Objetivo.        |                                                         Justificación. |
+| :------------- | :---------------------: | ---------------------------------------------------------------------: |
+| Extensibilidad | imagenes OSI eficientes |                            EL stack tiene pocas imagenes pero modulars |
+| Latencia.      |      < 200ms (p95)      |                                                 Experiencia de usuario |
+| Costo          |   < 40 U$D /mes (AWS)   | Al principio evitaremos como sea posible los costos en infraestructura |
+
+## 🧠 Razonamiento
+
+_Validación de la solución:_
+
+> La propuesta debe cumplir con todos los objetivos (principal y secundarios).
+
+_Justificación:_
+
+> Proporciona un breve razonamiento para cada decisión clave.
+
+_Alternativas Descartadas:_
+
+> De haberse evaluado, menciona al menos 1–2 enfoques que fueron evaluados y no seleccionados,
+> con la razón/motivo
+> Enfoque:
+> Prioriza soluciones con menos componentes y menor dependencia externa.
+> Minimalismo ya que "Menos componentes = menos mantenimiento."
+
+## 📌 Resultado Esperado (Formato de Respuesta)
+
+Ademas del pipeline y ejemplos tecnico detallas de punta a punta necesitaremos
+un resumen tabular que sintetice el Diseño de solucion.
+Si puedes generar un archivo zip con el proyecto o Script para generar el protecto o disponibilizar un archivo descargable con la propuesta seria ideal
+Puedes agregar Columnas adicionales que consideres
+
+| Objetivo.  | Criterio.  |      Idea Central. |
+| :--------- | :--------: | -----------------: |
+| Objetivo A | Criterio X | Breve detalle de A |
+| Objetivo B | Criterio Y | Breve detalle de B |
+| Objetivo C | Criterio Z | Breve detalle de C |
+
+## 📈 Esquema de Implementación:
+
+1. Paso 1: Ejecutar una investigacion de alternativas empezando por los links compartidos
+2. Paso 2: Establecer y priorizar un conjunto de tareas objetivos que deban solucionarse para empezar a razonar el diseño de solucion sugerido
+3. Paso 3: Validar la propuesta contra los objetivos y checklist establecidos respetando las decisiones
+4. Paso 3: En caso de encontrar restricciones o decisiones fundamentales apelar a mi, Interlocutor humano, como criterio de decision.
+5. Iterar y reformular desde `Paso 1`
+
+## ⚠️ Restriccione
+
+### **🚫 Prohibido:** 
+
+> Utilizar tecnologias con vendor locking agresivo
+
+### **🔒 Obligatorio:** 
+
+> La propuesta debe tener o conjugar ejemplos o casos de exitos donde pueda aplicarse y
+> evitar enfoques que sean teoricos
+> Solucion practico y ejecutable por sobre teoria y gaps de infromacion
+
+### **⚠️ Limitaciones:**
+
+> La propuesta debe poder ejecutarse por un equipo de ingenieros y Agentes LLM en un lapso de 2 dias
+> utilzando el menor budget posible, somos una startup de crecimiento exponencial
+
+> En proyectos node / frontend priorizamos uso de typescript
+> frameworks como Next.JS (prioritario) y Vue.JS 3 (secundario)
+> PNPM como gestor de de dependencias global
+> La conguracion y versiones de librerias sera compartido en la medida de los posible en `packages`
+
+> En proyectos python siempre utilizaremos Astral [UV]([https://docs.astral.sh/uv/])
+> como Administrador de paquetes y entorno virtual y no pip/poetry u otros
+
+> A futuro podemos considerar extender apps Rust / GoLang en busqueda de performance bruta
+
+> Usaremos las imagenes de docker más minimalista disponibles pero que al mismo tiempo no presenten CVE
+> o extraños segementacion faults a pesar de su reducido tamaño por tal motivo usamos por defecto `debian:bookworm-slim` o versiones `alpine`
+> Con el mismo criterio tambien nos mantenemos en las imgenes multiarch donde sea posible utlizar ARM64 como estrategia de costos minimos, apelando a cumplir con la funcionalidad
+
+> Opcionalmente y para assets estatico preferimos usar Buckets S3 / CludFlare R2 asociados a subdominos estaticos del mismo nombre unidos por CNAME para evitar incluir assets en las imagenes de DOcker

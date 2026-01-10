@@ -28,13 +28,8 @@ async def test_api_processor_http_400_permanent_error():
     """
     HTTP 4xx errors should be classified as PERMANENT (no retries).
     
-    ⚠️ KNOWN BUG: Currently, the processor RETRIES ValueError exceptions
-    (which are raised from 4xx errors). This is incorrect behavior - PERMANENT
-    errors should NOT be retried. The AsyncRetrying configuration needs to be
-    updated with retry=retry_if_not_exception_type(ValueError).
-    
-    This test documents the CURRENT (buggy) behavior. Once fixed, update to:
-    assert mock_client.request.call_count == 1
+    ✅ FIXED: AsyncRetrying now uses retry_if_not_exception_type(ValueError)
+    to prevent retrying PERMANENT errors (ValueError from 4xx HTTP responses).
     """
     processor = ApiCallProcessor(timeout=5.0)
     
@@ -70,9 +65,8 @@ async def test_api_processor_http_400_permanent_error():
         with pytest.raises(ValueError, match="HTTP 400"):
             await processor.process(event)
         
-        # ⚠️ BUG: Currently retries 5 times (should be 1)
-        # TODO: Fix AsyncRetrying config to stop on ValueError
-        assert mock_client.request.call_count == 5  # CURRENT (buggy) behavior
+        # ✅ FIXED: Should only attempt once (no retries for PERMANENT errors)
+        assert mock_client.request.call_count == 1
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,7 @@ import httpx
 from tenacity import (
     AsyncRetrying,
     RetryError,
+    retry_if_not_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
@@ -129,6 +130,8 @@ class ApiCallProcessor(IEventProcessor):
                 max=retry_config.max_backoff,
             ),
             reraise=True,
+            # Don't retry PERMANENT errors (ValueError from 4xx HTTP responses)
+            retry=retry_if_not_exception_type(ValueError),
         )
 
         async def _make_request() -> ProcessorResult:

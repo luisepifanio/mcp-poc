@@ -26,7 +26,7 @@ class PingRouter(BaseRouter):
         async def ping_post(
             data: dict[str, object],
         ) -> dict[str, object]:  # pyright: ignore[reportUnusedFunction]
-            message: JSONValue = {"message": "Hello FastStream from Gateway Api!"}
+            message: JSONValue = {"message": "Hello Mati!🟢 from Gateway Api!"}
 
             result = await self.publisher.publish(message, stream="demo-subject")
             if result.is_err():
