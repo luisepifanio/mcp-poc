@@ -42,6 +42,12 @@ curl http://app-local.hades.ar/api/ping
 - **[🚀 Deployment](docs/DEPLOYMENT.md)** - Estrategias de deployment
 - **[📊 Resumen Infra](docs/INFRASTRUCTURE_SETUP_SUMMARY.md)** - Cambios recientes
 
+### Guías internas
+- **[Pre-commit Checklist](PRE_COMMIT_CHECKLIST.md)**
+- **[Roadmap](ROADMAP.md)**
+- **[Changelog](CHANGELOG.md)**
+- **Plantillas de commit**: [COMMIT_MESSAGE.md](COMMIT_MESSAGE.md), [COMMIT_MESSAGE_DNS.md](COMMIT_MESSAGE_DNS.md)
+
 ### Documentación por proyecto:
 - **[Gateway API](gateway-api/Agents.md)** - API Gateway (FastAPI)
 - **[MCP Server](mcpserver/Agents.md)** - Backend de procesamiento
