@@ -44,19 +44,6 @@ uv run pytest
 
 ---
 
-## 📚 Referencias de Diseño (Histórico)
-
-- [PHASE4_COMPLETION_SUMMARY.md](PHASE4_COMPLETION_SUMMARY.md)
-- [PROCESS_EVENT_USECASE2_REFACTORING.md](PROCESS_EVENT_USECASE2_REFACTORING.md)
-- [QUALITY_ANALYSIS_NEO_EVENT_USECASE.md](QUALITY_ANALYSIS_NEO_EVENT_USECASE.md)
-- [PROJECT_COMPLETION_SUMMARY.md](PROJECT_COMPLETION_SUMMARY.md)
-- [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)
-- [COVERAGE_OPPORTUNITIES.md](COVERAGE_OPPORTUNITIES.md)
-- [ARCHITECTURE_OPPORTUNITIES.md](ARCHITECTURE_OPPORTUNITIES.md)
-- [ANALYSIS_ENQUEUE_EVENT_USECASE.md](ANALYSIS_ENQUEUE_EVENT_USECASE.md)
-
-> Nota: estos archivos viven en la raíz de `mcpserver/` y se mantienen como histórico. Para nuevas definiciones, preferir `mcpserver/docs/` y diagramas en Mermaid.
-
 ## 🏗️ Proyecto Overview
 
 ### Principios Core
