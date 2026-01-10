@@ -7,7 +7,8 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - targetPort: 8000
+    - name: http-api
+      targetPort: http-api # Usa el nombre aquí
       port: 80
   selector:
     app: gateway-api
@@ -25,6 +26,8 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: gateway-api-credentials
+  labels:
+    app: gateway-api
 type: Opaque
 data:
   email: YWRtaW5AYWRtaW4uY29t
@@ -51,18 +54,40 @@ spec:
         - name: gateway-api
           image: gateway-api
           ports:
-            - containerPort: 8000
-          livenessProbe:
-            initialDelaySeconds: 3
+            - name: http-api # Añade este nombre
+              containerPort: 8000
+          # Readiness: Evita el "Empty reply".
+          # Nginx no enviará tráfico hasta que FastAPI responda "pong" en el puerto 8000.
+          readinessProbe:
+            httpGet:
+              path: /ping # Directo a FastAPI
+              port: 8000
+            initialDelaySeconds: 2 # FastAPI sube rápido, 2s es suficiente
             periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          # Liveness: Mantenlo para que Kubernetes reinicie el Pod si el proceso muere.
+          livenessProbe:
             httpGet:
               path: /ping
               port: 8000
+            initialDelaySeconds: 10 # Dale más margen que al Readiness
+            periodSeconds: 10
           env:
             - name: ENV
               value: "prod"
             - name: LOG_LEVEL
               value: "INFO"
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: redis-stream-configuration
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: redis-stream-configuration
+                  key: REDIS_PORT
           envFrom:
             - configMapRef:
                 name: gateway-api-configuration

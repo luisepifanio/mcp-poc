@@ -105,7 +105,7 @@ def get_logging_config() -> dict[str, Any]:
             },
             "uvicorn.access": {
                 "handlers": ["default"],
-                "level": "INFO",
+                "level": "WARNING",
                 "propagate": False,
             },
         },

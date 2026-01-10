@@ -1,0 +1,102 @@
+---
+# ConfigMap para Redis Stream
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-stream-configuration
+  labels:
+    app: redis-stream
+    component: infrastructure
+data:
+  REDIS_HOST: "redis-stream"
+  REDIS_PORT: "6379"
+  REDIS_STREAM_KEY: "events-stream"
+---
+# Secret para Redis (ejemplo: contraseña)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-stream-credentials
+  labels:
+    app: redis-stream
+    component: infrastructure
+type: Opaque
+data:
+  REDIS_PASSWORD: "cGFzc3dvcmQxMjM=" # echo -n "password123" | base64
+---
+# Service para Redis Stream
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-stream
+  labels:
+    app: redis-stream
+    component: infrastructure
+spec:
+  selector:
+    app: redis-stream
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+# Deployment para Redis Stream
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-stream
+  labels:
+    app: redis-stream
+    component: infrastructure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-stream
+  template:
+    metadata:
+      labels:
+        app: redis-stream
+    spec:
+      containers:
+        - name: redis
+          image: redis:8.4-alpine
+          ports:
+            - containerPort: 6379
+          envFrom:
+            - configMapRef:
+                name: redis-stream-configuration
+            - secretRef:
+                name: redis-stream-credentials
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-stream-pvc
+---
+# PersistentVolumeClaim para durabilidad
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-stream-pvc
+  labels:
+    app: redis-stream
+    component: infrastructure
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

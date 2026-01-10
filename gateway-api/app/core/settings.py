@@ -17,11 +17,37 @@ class AppSettings(BaseSettings):
     env: str = "development"
     log_level: str = "DEBUG"
 
+    # Redis configuration
+    redis_url: str = "redis://localhost:6379"
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=resolve_env_file(),
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def redis_connection_url(self) -> str:
+        """
+        Build Redis connection URL from components.
+
+        Prioritizes `redis_url` if explicitly customized.
+        Otherwise, constructs from host/port/password/db components.
+
+        Returns:
+            Complete Redis connection URL
+        """
+        # If redis_url was customized, use it directly
+        if self.redis_url != "redis://localhost:6379":
+            return self.redis_url
+
+        # Build from components (useful for K8s secrets, etc.)
+        auth = f":{self.redis_password}@" if self.redis_password else ""
+        return f"redis://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
 
 _config: AppSettings | None = None

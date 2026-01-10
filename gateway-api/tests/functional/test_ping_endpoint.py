@@ -31,10 +31,12 @@ class TestPingEndpoint:
         response = app_client.get("/ping")
         assert response.status_code == 200
 
-    def test_ping_uses_correct_method(self, app_client: TestClient) -> None:
-        """Test that /ping only accepts GET requests."""
-        response = app_client.post("/ping")
-        assert response.status_code == 405  # Method Not Allowed
+    def test_ping_post_accepts_data(self, app_client: TestClient) -> None:
+        """Test that /ping POST accepts data for Redis testing."""
+        response = app_client.post("/ping", json={"test": "data"})
+        assert response.status_code == 200
+        assert response.json()["message"] == "Item received"
+        assert response.json()["data"] == {"test": "data"}
 
 
 class TestAppLifespan:
