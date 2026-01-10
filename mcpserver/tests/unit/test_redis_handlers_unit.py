@@ -116,7 +116,7 @@ async def test_handle_processing_event_queue_ack_on_success() -> None:
             registry_mock.get.return_value = processor_mock
 
             with patch(
-                "app.infrastructure.redis.main.ProcessEventUseCase2"
+                "app.infrastructure.redis.main.ProcessEventIdealUseCase"
             ) as usecase_mock_class:
                 usecase_mock = MagicMock()
                 usecase_mock.execute = AsyncMock(
@@ -195,5 +195,10 @@ async def test_handle_processing_event_queue_nack_on_event_not_found() -> None:
 
         result = await handle_processing_event_queue(body, msg, session_mock)
 
-        msg.nack.assert_awaited_once()
-        assert result is None
+        msg.ack.assert_awaited_once()
+        msg.nack.assert_not_awaited()
+        assert result == {
+            "error": ErrorCatalog.NOT_FOUND.value,
+            "detail": "Event not found",
+            "metadata": None,
+        }

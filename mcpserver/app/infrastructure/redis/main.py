@@ -6,7 +6,7 @@ from faststream import AckPolicy, Context, ContextRepo, Depends, FastStream
 from faststream.redis import RedisBroker, StreamSub
 from faststream.redis.annotations import RedisMessage
 from faststream.redis.subscriber.usecases import StreamBatchSubscriber, StreamSubscriber
-from result import Ok
+from result import Err, Ok
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import (
     AsyncRetrying,
@@ -17,13 +17,12 @@ from tenacity import (
     wait_exponential,
 )
 
-from app.core.processor_registry import processor_registry
 from app.core.usecases.event_usecases import (
     EnqueuedEventUseCaseInput,
     EnqueuedEventUseCaseOutput,
     EnqueueEventUseCase,
 )
-from app.core.usecases.process_event_usecase import ProcessEventUseCase2
+from app.core.usecases.neo_event_usecase import ProcessEventIdealUseCase
 
 from ...core.settings import getAppSettings
 from ..db.connection import get_session
@@ -199,76 +198,36 @@ async def handle_processing_event_queue(
     """
     Handle event processing orchestration with retry strategy.
 
-    Flow:
-    1. Load event from DB
-    2. Instantiate ProcessEventUseCase2 with dependencies (UoW, ProcessorRegistry)
-    3. Execute with retry strategy (tenacity - exponential backoff)
-       - Retries on transient errors
-       - Classifies errors via processor.classify_error()
-    4. Adapt output to response
-    5. Acknowledge/nack message based on result
+     Flow:
+     1. Load event from DB
+     2. Instantiate ProcessEventIdealUseCase with dependencies (UoW, ProcessorRegistry)
+     3. Execute with retry strategy (tenacity - exponential backoff)
+         - Retries on transient errors
+         - Classifies errors via processor.classify_error()
+     4. Adapt output to response
+     5. Acknowledge/nack message based on result
 
-    Retry logic is encapsulated in infrastructure with tenacity.
-    UseCase handles state transitions and processor invocation.
+     Retry logic is encapsulated in infrastructure with tenacity.
+     UseCase handles state transitions and processor invocation.
     """
+
+    logger.info(f"Processing event: {body.id} (name={body.name})")
+
     try:
-        logger.info(f"Processing event: {body.id} (name={body.name})")
-
         async with AsyncSQLAlchemyUnitOfWork(session, owns_session=False) as uow:
-            event_result = await uow.events.getOne(body.id)
-            if event_result.is_err():
-                logger.error(f"Event {body.id} not found in DB")
-                await msg.nack()
-                return None
-
-            event = event_result.unwrap()
-
-            # ProcessEventUseCase2 encapsulates retry logic (CORE business logic)
-            usecase = ProcessEventUseCase2(uow, processor_registry)
-            result = await usecase.execute(event)
+            usecase = ProcessEventIdealUseCase(uow)
+            result = await usecase.execute(body)
 
             # Handle result
-            if result.is_ok():
-                processed_event = result.unwrap()
-                logger.info(
-                    f"Event {body.id} processed successfully: state={processed_event.state}"
-                )
-                await msg.ack()
-                return {
-                    "event_id": str(body.id),
-                    "status": "success",
-                    "state": processed_event.state.value,
-                }
-            else:
-                error = result.unwrap_err()
-                logger.error(f"Event {body.id} processing failed: {error.detail}")
-                await msg.ack()
-                return {
-                    "event_id": str(body.id),
-                    "status": "error",
-                    "error": error.detail,
-                }
-                logger.info(
-                    f"Event {body.id} processed successfully: {processed_event.state}"
-                )
-                await msg.ack()
-                return {
-                    "event_id": str(processed_event.id),
-                    "state": processed_event.state.value,
-                }
 
-            if result and result.is_err():
-                error_detail = result.unwrap_err()
-                logger.error(f"Event {body.id} processing failed: {error_detail.detail}")
-                await msg.ack()
-                return {
-                    "event_id": str(body.id),
-                    "error": error_detail.detail,
-                }
-
-            logger.error(f"Event {body.id}: Unknown result state")
-            await msg.nack()
-            return None
+            match result:
+                case Err(ed):
+                    logger.error(f"Error processing event: {ed}")
+                    await msg.ack()
+                    return ed.model_dump(mode="json")
+                case Ok(ev):
+                    await msg.ack()
+                    return ev.model_dump(mode="json")
 
     except Exception as e:
         logger.error(

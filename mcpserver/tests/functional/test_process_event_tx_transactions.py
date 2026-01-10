@@ -1,8 +1,6 @@
-import asyncio
 from uuid import uuid4
 
 import pytest
-from result import Ok
 
 from app.core.entities import Event, EventState
 from app.core.processor_registry import processor_registry

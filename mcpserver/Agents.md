@@ -444,6 +444,8 @@ uv run pytest
 
 # 4. Commit solo si TODO pasa
 git add -A && git commit -m "feat(usecase): stage1 validate_and_lock + unit tests"
+
+**Nota de entorno**: todos los checks (ruff, mypy, pytest) deben ejecutarse vía `uv run ...` para respetar el virtualenv del proyecto. Evita rutas directas como `.venv/bin/python -m ruff`; usa siempre `uv run ruff check ...`, `uv run mypy app`, `uv run pytest`.
 ```
 
 ---
