@@ -156,70 +156,37 @@ class AsyncSQLAlchemyEventRepository(EventRepository):
             pass
 
     async def save_or_resolve_one(self, event: Event) -> Result[Event, ErrorDetail]:
-        """Insert or resolve a single Event.
+        """Insert or resolve a single Event using save_or_resolve() internally.
 
-        Assumes event is loaded with necessary relationships/transitions.
+        Delegates to save_or_resolve() which uses SAVEPOINTs for safe conflict isolation.
+        Converts the list result to a single event result.
 
         Strategy:
-        - Attempt insert.
-        - On IntegrityError: resolve the existing canonical row using resolve_this_events.
-        - If resolution fails or is ambiguous, return an error_detail.
+        - Calls save_or_resolve([event]) which handles:
+          * SAVEPOINT creation before INSERT
+          * IntegrityError → rollback savepoint (not whole TX)
+          * Resolves existing canonical row on conflict
+        - Extracts first element from the result list
         """
+        resolved = await self.save_or_resolve([event])
 
-        try:
-            if not self.session.object_session(event):
-                event = await self.session.merge(event)
-
-            self.session.add(event)
-            await self.session.flush()
-
-            # Eager-load transitions using SELECT
-            query = (
-                select(Event)
-                .where(Event.id == event.id)
-                .options(selectinload(cast(Any, Event.transitions)))
-            )
-            result = await self.session.execute(query)
-            evt = result.scalars().one()
-            return Ok(evt)
-
-        except IntegrityError:
-            logger.warning(
-                "IntegrityError on save_or_resolve_one for event (%s,%s)",
-                event.id,
-                event.external_uuid,
-            )
-
-            # Rollback the failed transaction before attempting to resolve
-            await self.session.rollback()
-
-            resolved: Result[list[Event], ErrorDetail] = await self._resolve_this_events(
-                [event]
-            )
-
-            return resolved.and_then(
-                lambda evs: Ok(evs[0])
-                if len(evs) == 1
-                else Err(
-                    ErrorDetail(
-                        error=ErrorCatalog.NOT_FOUND.value,
-                        detail=f"Event with external_uuid {event.external_uuid} not found.",
-                    )
-                )
-                if len(evs) == 0
-                else Err(
-                    ErrorDetail(
-                        error=ErrorCatalog.RUNTIME_FAILED.value,
-                        detail="Event resolution failed on uniqueness after conflict",
-                    )
+        return resolved.and_then(
+            lambda evs: Ok(evs[0])
+            if len(evs) == 1
+            else Err(
+                ErrorDetail(
+                    error=ErrorCatalog.NOT_FOUND.value,
+                    detail=f"Event with id {event.id} not found after conflict",
                 )
             )
-
-        except Exception as exc:
-            logger.error(f"Error in save_or_resolve_one: {exc}", exc_info=True)
-            return Err(
-                ErrorDetail(error=ErrorCatalog.RUNTIME_FAILED.value, detail=str(exc))
+            if len(evs) == 0
+            else Err(
+                ErrorDetail(
+                    error=ErrorCatalog.RUNTIME_FAILED.value,
+                    detail="Event resolution failed on uniqueness after conflict",
+                )
             )
+        )
 
     async def _resolve_this_events(
         self, list_of_events: list[Event]

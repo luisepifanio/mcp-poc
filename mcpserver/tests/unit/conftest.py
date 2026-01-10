@@ -1,3 +1,4 @@
+import sys
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
@@ -56,7 +57,6 @@ def uow_mock() -> MagicMock:
     mock.events.getOne = AsyncMock()
     mock.events.get_by_external_uuid = AsyncMock()
     mock.events.getMany = AsyncMock()
-
     # Configurar como async context manager
     mock.__aenter__ = AsyncMock(return_value=mock)
     mock.__aexit__ = AsyncMock(return_value=None)
