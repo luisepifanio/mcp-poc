@@ -81,8 +81,7 @@ class BaseProcessorErrorClassifier:
     PERMANENT_EXCEPTIONS: ClassVar[tuple[type[BaseException], ...]] = (ValueError,)
     TRANSIENT_EXCEPTIONS: ClassVar[tuple[type[BaseException], ...]] = ()
 
-    @classmethod
-    def classify_error(cls, exc: BaseException) -> ErrorType:
+    def classify_error(self, exc: BaseException) -> ErrorType:
         """
         Classify error as PERMANENT or TRANSIENT.
 
@@ -96,18 +95,17 @@ class BaseProcessorErrorClassifier:
             ErrorType (PERMANENT or TRANSIENT)
         """
         # Check permanent exceptions first
-        if isinstance(exc, cls.PERMANENT_EXCEPTIONS):
+        if isinstance(exc, self.PERMANENT_EXCEPTIONS):
             return ErrorType.PERMANENT
 
         # Check transient exceptions
-        if isinstance(exc, cls.TRANSIENT_EXCEPTIONS):
+        if isinstance(exc, self.TRANSIENT_EXCEPTIONS):
             return ErrorType.TRANSIENT
 
         # Delegate to subclass for custom logic
-        return cls._classify_custom(exc)
+        return self._classify_custom(exc)
 
-    @classmethod
-    def _classify_custom(cls, exc: BaseException) -> ErrorType:
+    def _classify_custom(self, exc: BaseException) -> ErrorType:
         """
         Override in subclass for processor-specific error classification.
 
