@@ -119,7 +119,7 @@ class BaseProcessorErrorClassifier:
         Returns:
             ErrorType (PERMANENT or TRANSIENT)
         """
-        ...
+        return ErrorType.PERMANENT
 
 
 class IEventProcessor(ABC):

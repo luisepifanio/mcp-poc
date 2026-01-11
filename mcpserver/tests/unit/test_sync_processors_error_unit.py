@@ -15,7 +15,12 @@ import httpx
 import pytest
 
 from app.core.entities import Event, EventState
-from app.core.processors import ErrorType, ProcessorResultStatus
+from app.core.processors import (
+    ErrorType,
+    ProcessorResult,
+    ProcessorResultStatus,
+    RetryConfig,
+)
 from app.infrastructure.processors.sync_processors import ApiCallProcessor
 from tests.unit.conftest import FAST_TEST_RETRY_CONFIG
 
@@ -23,7 +28,7 @@ from tests.unit.conftest import FAST_TEST_RETRY_CONFIG
 
 
 @pytest.mark.asyncio
-async def test_api_processor_http_400_permanent_error():
+async def test_api_processor_http_400_permanent_error() -> None:
     """
     HTTP 4xx errors should be classified as PERMANENT (no retries).
 
@@ -69,7 +74,7 @@ async def test_api_processor_http_400_permanent_error():
 
 
 @pytest.mark.asyncio
-async def test_api_processor_http_503_transient_retries():
+async def test_api_processor_http_503_transient_retries() -> None:
     """HTTP 5xx errors should retry (TRANSIENT)."""
     processor = ApiCallProcessor(timeout=5.0, retry_config=FAST_TEST_RETRY_CONFIG)
 
@@ -114,7 +119,7 @@ async def test_api_processor_http_503_transient_retries():
         mock_client_class.return_value = mock_client
 
         # Should succeed after retries
-        result = await processor.process(event)
+        result: ProcessorResult = await processor.process(event)
 
         assert result.status == ProcessorResultStatus.SUCCESS
         assert result.data["status_code"] == 200
@@ -125,7 +130,7 @@ async def test_api_processor_http_503_transient_retries():
 
 
 @pytest.mark.asyncio
-async def test_api_processor_timeout_transient():
+async def test_api_processor_timeout_transient() -> None:
     """Timeout errors should be classified as TRANSIENT (retryable)."""
     processor = ApiCallProcessor(timeout=1.0, retry_config=FAST_TEST_RETRY_CONFIG)
 
@@ -160,7 +165,7 @@ async def test_api_processor_timeout_transient():
 
 
 @pytest.mark.asyncio
-async def test_api_processor_invalid_method_validation():
+async def test_api_processor_invalid_method_validation() -> None:
     """Invalid HTTP method should raise ValueError immediately."""
     processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
@@ -180,7 +185,7 @@ async def test_api_processor_invalid_method_validation():
 
 
 @pytest.mark.asyncio
-async def test_api_processor_missing_url_validation():
+async def test_api_processor_missing_url_validation() -> None:
     """Missing URL should raise ValueError immediately."""
     processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
@@ -200,7 +205,7 @@ async def test_api_processor_missing_url_validation():
 
 
 @pytest.mark.asyncio
-async def test_api_processor_classify_error_permanent():
+async def test_api_processor_classify_error_permanent() -> None:
     """Test error classification for PERMANENT errors."""
     processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
@@ -214,7 +219,7 @@ async def test_api_processor_classify_error_permanent():
 
 
 @pytest.mark.asyncio
-async def test_api_processor_classify_error_transient():
+async def test_api_processor_classify_error_transient() -> None:
     """Test error classification for TRANSIENT errors."""
     processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
@@ -238,11 +243,11 @@ async def test_api_processor_classify_error_transient():
 
 
 @pytest.mark.asyncio
-async def test_api_processor_retry_config():
+async def test_api_processor_retry_config() -> None:
     """Test retry configuration returns expected values (production defaults)."""
     processor = ApiCallProcessor()  # No fast config - test production defaults
 
-    config = processor.get_retry_config()
+    config: RetryConfig = processor.get_retry_config()
 
     # Verify production retry configuration
     assert config.max_attempts == 5
@@ -254,7 +259,7 @@ async def test_api_processor_retry_config():
 
 
 @pytest.mark.asyncio
-async def test_api_processor_retry_exhaustion():
+async def test_api_processor_retry_exhaustion() -> None:
     """Test behavior when all retries are exhausted."""
     processor = ApiCallProcessor(timeout=1.0, retry_config=FAST_TEST_RETRY_CONFIG)
 
@@ -298,7 +303,7 @@ async def test_api_processor_retry_exhaustion():
 
 
 @pytest.mark.asyncio
-async def test_api_processor_success_with_empty_response():
+async def test_api_processor_success_with_empty_response() -> None:
     """Test successful API call with empty response body."""
     processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
@@ -328,7 +333,7 @@ async def test_api_processor_success_with_empty_response():
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client_class.return_value = mock_client
 
-        result = await processor.process(event)
+        result: ProcessorResult = await processor.process(event)
 
         assert result.status == ProcessorResultStatus.SUCCESS
         assert result.data["status_code"] == 204
@@ -336,7 +341,7 @@ async def test_api_processor_success_with_empty_response():
 
 
 @pytest.mark.asyncio
-async def test_api_processor_custom_headers():
+async def test_api_processor_custom_headers() -> None:
     """Test API call with custom headers."""
     processor = ApiCallProcessor(retry_config=FAST_TEST_RETRY_CONFIG)
 
@@ -370,7 +375,7 @@ async def test_api_processor_custom_headers():
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client_class.return_value = mock_client
 
-        result = await processor.process(event)
+        result: ProcessorResult = await processor.process(event)
 
         assert result.status == ProcessorResultStatus.SUCCESS
 

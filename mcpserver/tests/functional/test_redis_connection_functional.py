@@ -1,16 +1,15 @@
 """Functional tests for Redis broker connection and lifecycle."""
 
 import pytest
+from faststream.redis import TestRedisBroker
+
+from app.infrastructure.redis.main import broker
 
 # Skip this entire module due to AsyncEngine(sqlite) incompatibility
 pytest.skip(
     reason="Redis connection tests skipped - requires aiosqlite driver",
     allow_module_level=True,
 )
-
-from faststream.redis import TestRedisBroker
-
-from app.infrastructure.redis.main import broker
 
 
 @pytest.mark.asyncio
