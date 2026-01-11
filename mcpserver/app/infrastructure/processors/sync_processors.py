@@ -58,7 +58,7 @@ class ApiCallProcessor(IEventProcessor, BaseProcessorErrorClassifier):
         "timeout": 10  # seconds
     }
     """
-    
+
     # Error classification: ValidationError → permanent, Connection/Timeout → transient
     PERMANENT_EXCEPTIONS = (ValueError,)
     # httpx errors that are transient (should retry)
@@ -95,12 +95,16 @@ class ApiCallProcessor(IEventProcessor, BaseProcessorErrorClassifier):
         # Validate required fields
         method_str = payload.get("method", "GET")
         if not isinstance(method_str, str):
-            raise ValueError(f"{ErrorCatalog.INVALID_HTTP_METHOD.value}: 'method' must be a string")
+            raise ValueError(
+                f"{ErrorCatalog.INVALID_HTTP_METHOD.value}: 'method' must be a string"
+            )
         method = method_str.upper()
 
         url = payload.get("url")
         if not isinstance(url, str):
-            raise ValueError(f"{ErrorCatalog.INVALID_HTTP_URL.value}: 'url' must be a string")
+            raise ValueError(
+                f"{ErrorCatalog.INVALID_HTTP_URL.value}: 'url' must be a string"
+            )
 
         if method not in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"):
             raise ValueError(f"{ErrorCatalog.INVALID_HTTP_METHOD.value}: {method}")
@@ -209,12 +213,12 @@ class ApiCallProcessor(IEventProcessor, BaseProcessorErrorClassifier):
     def classify_error(self, exc: BaseException) -> ErrorType:
         """
         Classify API errors for retry strategy using BaseProcessorErrorClassifier.
-        
+
         HTTP-specific logic:
         - 4xx responses → PERMANENT (raise ValueError)
         - 5xx responses → TRANSIENT (will retry)
         - Connection errors → TRANSIENT (via TRANSIENT_EXCEPTIONS)
-        
+
         Method resolution order:
         1. Check PERMANENT_EXCEPTIONS (ValueError)
         2. Check TRANSIENT_EXCEPTIONS (ConnectError, TimeoutException)
@@ -230,17 +234,17 @@ class ApiCallProcessor(IEventProcessor, BaseProcessorErrorClassifier):
         # First check permanent exceptions
         if isinstance(exc, self.PERMANENT_EXCEPTIONS):
             return ErrorType.PERMANENT
-        
+
         # Then check transient exceptions
         if isinstance(exc, self.TRANSIENT_EXCEPTIONS):
             return ErrorType.TRANSIENT
-        
+
         # HTTP Status Error: check response code
         if isinstance(exc, httpx.HTTPStatusError):
             if 400 <= exc.response.status_code < 500:
                 return ErrorType.PERMANENT  # 4xx = client error
             return ErrorType.TRANSIENT  # 5xx = server error
-        
+
         # Default to permanent (safe - don't retry unknown errors)
         return ErrorType.PERMANENT
 
@@ -263,7 +267,7 @@ class GrpcProcessor(IEventProcessor, BaseProcessorErrorClassifier):
     Note: This is a skeleton. Actual implementation requires
     gRPC channel management and service stubs.
     """
-    
+
     # Error classification: validation errors are permanent
     PERMANENT_EXCEPTIONS = (ValueError,)
 
@@ -301,9 +305,13 @@ class GrpcProcessor(IEventProcessor, BaseProcessorErrorClassifier):
         address = payload.get("address", "localhost:50051")
 
         if not service:
-            raise ValueError(f"{ErrorCatalog.INVALID_GRPC_SERVICE.value}: 'service' is required in payload")
+            raise ValueError(
+                f"{ErrorCatalog.INVALID_GRPC_SERVICE.value}: 'service' is required in payload"
+            )
         if not method:
-            raise ValueError(f"{ErrorCatalog.INVALID_GRPC_METHOD.value}: 'method' is required in payload")
+            raise ValueError(
+                f"{ErrorCatalog.INVALID_GRPC_METHOD.value}: 'method' is required in payload"
+            )
 
         timeout_value = payload.get("timeout", self.timeout)
         if not isinstance(timeout_value, (int, float)):
@@ -351,11 +359,11 @@ class GrpcProcessor(IEventProcessor, BaseProcessorErrorClassifier):
     def classify_error(self, exc: BaseException) -> ErrorType:
         """
         Classify gRPC errors for retry strategy using BaseProcessorErrorClassifier.
-        
+
         gRPC-specific logic:
         - INVALID_ARGUMENT, NOT_FOUND, PERMISSION_DENIED → PERMANENT
         - UNAVAILABLE, RESOURCE_EXHAUSTED, DEADLINE_EXCEEDED → TRANSIENT
-        
+
         Delegates to parent class for standard cases.
 
         Args:
@@ -401,7 +409,7 @@ class LocalUseCaseProcessor(IEventProcessor, BaseProcessorErrorClassifier):
 
     Requires: UnitOfWork injection to access use cases.
     """
-    
+
     # Error classification: validation errors are permanent
     PERMANENT_EXCEPTIONS = (ValueError, TypeError)
 
@@ -438,7 +446,9 @@ class LocalUseCaseProcessor(IEventProcessor, BaseProcessorErrorClassifier):
         use_case_input = raw_input if isinstance(raw_input, dict) else {}
 
         if not use_case_name:
-            raise ValueError(f"{ErrorCatalog.MISSING_USECASE_NAME.value}: 'use_case_name' is required in payload")
+            raise ValueError(
+                f"{ErrorCatalog.MISSING_USECASE_NAME.value}: 'use_case_name' is required in payload"
+            )
 
         self.logger.info(
             f"Local use case: {use_case_name}",
@@ -480,11 +490,11 @@ class LocalUseCaseProcessor(IEventProcessor, BaseProcessorErrorClassifier):
     def classify_error(self, exc: BaseException) -> ErrorType:
         """
         Classify local use case errors using BaseProcessorErrorClassifier.
-        
+
         Local use case-specific logic:
         - ValidationError, ValueError, TypeError → PERMANENT (bugs)
         - Connection/TimeoutError → TRANSIENT (infra issues)
-        
+
         Delegates to parent class for standard classification.
 
         Args:
@@ -493,8 +503,7 @@ class LocalUseCaseProcessor(IEventProcessor, BaseProcessorErrorClassifier):
         Returns:
             ErrorType based on exception type
         """
-        from pydantic import ValidationError
-        
+
         # Local-specific: Connection/Timeout are transient
         if isinstance(exc, (ConnectionError, TimeoutError)):
             return ErrorType.TRANSIENT

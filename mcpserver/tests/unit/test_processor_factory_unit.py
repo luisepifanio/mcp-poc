@@ -7,9 +7,7 @@ Tests verify that:
 3. Factory instantiation works correctly
 """
 
-import pytest
-
-from app.core.processor_factory import DEFAULT_RETRY_PRESETS, RetryConfigPresets
+from app.core.processor_factory import DEFAULT_RETRY_PRESETS
 from app.core.processors import RetryConfig
 
 

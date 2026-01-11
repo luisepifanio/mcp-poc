@@ -80,7 +80,6 @@ async def test_subscriber_demo_handler_acks_on_success() -> None:
     msg.ack = AsyncMock()
     msg.nack = AsyncMock()
 
-
     # Simulate subscriber_demo function logic
     try:
         # Log the message (would use logger in real code)
@@ -102,7 +101,6 @@ async def test_subscriber_demo_handler_nacks_on_ack_exception() -> None:
     msg = MagicMock()
     msg.ack = AsyncMock(side_effect=Exception("connection lost"))
     msg.nack = AsyncMock()
-
 
     # Simulate subscriber_demo function logic
     try:

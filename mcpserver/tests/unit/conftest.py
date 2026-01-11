@@ -95,7 +95,7 @@ def uow_mock() -> MagicMock:
 def api_processor_fast() -> ApiCallProcessor:
     """
     Fast API processor for quick unit tests.
-    
+
     Uses test retry config with <100ms latency.
     """
     return ApiCallProcessor(
@@ -108,7 +108,7 @@ def api_processor_fast() -> ApiCallProcessor:
 def api_processor_slow() -> ApiCallProcessor:
     """
     Production-speed API processor for realistic testing.
-    
+
     Uses production retry config with 500ms-2s exponential backoff.
     """
     return ApiCallProcessor(
@@ -121,7 +121,7 @@ def api_processor_slow() -> ApiCallProcessor:
 def grpc_processor_fast() -> GrpcProcessor:
     """
     Fast gRPC processor for quick unit tests.
-    
+
     Uses test retry config with <100ms latency.
     """
     return GrpcProcessor(
@@ -134,7 +134,7 @@ def grpc_processor_fast() -> GrpcProcessor:
 def grpc_processor_slow() -> GrpcProcessor:
     """
     Production-speed gRPC processor for realistic testing.
-    
+
     Uses production retry config with 300ms-2s exponential backoff.
     """
     return GrpcProcessor(
@@ -147,7 +147,7 @@ def grpc_processor_slow() -> GrpcProcessor:
 def local_processor_fast() -> LocalUseCaseProcessor:
     """
     Fast local use case processor for quick unit tests.
-    
+
     Uses test retry config with <100ms latency.
     """
     return LocalUseCaseProcessor(
@@ -160,11 +160,10 @@ def local_processor_fast() -> LocalUseCaseProcessor:
 def local_processor_slow() -> LocalUseCaseProcessor:
     """
     Production-speed local use case processor for realistic testing.
-    
+
     Uses production retry config with 50ms-1s exponential backoff.
     """
     return LocalUseCaseProcessor(
         uow=None,  # Not needed for processor construction
         retry_config=get_local_usecase_retry_config(fast=False),
     )
-

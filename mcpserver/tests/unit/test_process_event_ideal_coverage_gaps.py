@@ -67,7 +67,9 @@ async def test_pending_callback_with_none_metadata() -> None:
         metadata=None,  # ← metadata es None
     )
     usecase = make_usecase_with_processor(processor)
-    event = Event(id=uuid4(), name="evt", state=EventState.PROCESSING, payload={}, context={})
+    event = Event(
+        id=uuid4(), name="evt", state=EventState.PROCESSING, payload={}, context={}
+    )
 
     result = await usecase.process_with_retries(event)
 
@@ -89,7 +91,9 @@ async def test_processor_failed_with_none_error() -> None:
         error=None,  # ← error es None, debe usar default "Processor failed"
     )
     usecase = make_usecase_with_processor(processor)
-    event = Event(id=uuid4(), name="evt", state=EventState.PROCESSING, payload={}, context={})
+    event = Event(
+        id=uuid4(), name="evt", state=EventState.PROCESSING, payload={}, context={}
+    )
 
     result = await usecase.process_with_retries(event)
 
@@ -108,7 +112,9 @@ async def test_processor_failed_from_retrying_state() -> None:
         error="boom",
     )
     usecase = make_usecase_with_processor(processor)
-    event = Event(id=uuid4(), name="evt", state=EventState.RETRYING, payload={}, context={})
+    event = Event(
+        id=uuid4(), name="evt", state=EventState.RETRYING, payload={}, context={}
+    )
 
     result = await usecase.process_with_retries(event)
 
@@ -123,7 +129,9 @@ async def test_exception_from_retrying_state() -> None:
     # RuntimeError es TRANSIENT, pero mockear un fallo que no se reintenta
     processor._process.side_effect = RuntimeError("boom")
     usecase = make_usecase_with_processor(processor)
-    event = Event(id=uuid4(), name="evt", state=EventState.RETRYING, payload={}, context={})
+    event = Event(
+        id=uuid4(), name="evt", state=EventState.RETRYING, payload={}, context={}
+    )
 
     # RuntimeError es TRANSIENT, reintenta hasta agotar
     result = await usecase.process_with_retries(event)
@@ -149,7 +157,9 @@ async def test_retries_exhaust_before_success_from_retrying() -> None:
         RuntimeError("fail3"),
     ]
     usecase = make_usecase_with_processor(processor)
-    event = Event(id=uuid4(), name="evt", state=EventState.RETRYING, payload={}, context={})
+    event = Event(
+        id=uuid4(), name="evt", state=EventState.RETRYING, payload={}, context={}
+    )
 
     result = await usecase.process_with_retries(event)
 
@@ -176,7 +186,9 @@ async def test_persist_outcome_save_error_returns_err() -> None:
     uow.commit = AsyncMock()
 
     usecase = ProcessEventIdealUseCase(uow=uow)
-    event = Event(id=uuid4(), name="evt", state=EventState.PROCESSING, payload={}, context={})
+    event = Event(
+        id=uuid4(), name="evt", state=EventState.PROCESSING, payload={}, context={}
+    )
     event.result = {"payload": {"ok": True}}
 
     result = await usecase.persist_outcome(event)
@@ -197,7 +209,9 @@ async def test_persist_outcome_pending_callback_save_error() -> None:
     uow.commit = AsyncMock()
 
     usecase = ProcessEventIdealUseCase(uow=uow)
-    event = Event(id=uuid4(), name="evt", state=EventState.RETRYING, payload={}, context={})
+    event = Event(
+        id=uuid4(), name="evt", state=EventState.RETRYING, payload={}, context={}
+    )
     event.context = {"processing": {"pending_callback": True}}
 
     result = await usecase.persist_outcome(event)
@@ -217,9 +231,15 @@ async def test_persist_outcome_exhausted_save_error() -> None:
     uow.commit = AsyncMock()
 
     usecase = ProcessEventIdealUseCase(uow=uow)
-    event = Event(id=uuid4(), name="evt", state=EventState.TEMPORAL_ERROR, payload={}, context={})
+    event = Event(
+        id=uuid4(), name="evt", state=EventState.TEMPORAL_ERROR, payload={}, context={}
+    )
     event.transitions = [
-        EventTransition(event_id=event.id, from_state=EventState.RETRYING, to_state=EventState.TEMPORAL_ERROR)
+        EventTransition(
+            event_id=event.id,
+            from_state=EventState.RETRYING,
+            to_state=EventState.TEMPORAL_ERROR,
+        )
     ]
     event.context = {"processing": {"retry_exhausted": True}}
 
@@ -240,7 +260,9 @@ async def test_persist_outcome_default_temporal_error_save_error() -> None:
     uow.commit = AsyncMock()
 
     usecase = ProcessEventIdealUseCase(uow=uow)
-    event = Event(id=uuid4(), name="evt", state=EventState.TEMPORAL_ERROR, payload={}, context={})
+    event = Event(
+        id=uuid4(), name="evt", state=EventState.TEMPORAL_ERROR, payload={}, context={}
+    )
 
     result = await usecase.persist_outcome(event)
 
@@ -260,7 +282,9 @@ async def test_persist_outcome_success_from_retrying_with_no_transition() -> Non
 
     usecase = ProcessEventIdealUseCase(uow=uow)
     # Evento ya en estado COMPLETED (edge case: idempotencia)
-    event = Event(id=uuid4(), name="evt", state=EventState.COMPLETED, payload={}, context={})
+    event = Event(
+        id=uuid4(), name="evt", state=EventState.COMPLETED, payload={}, context={}
+    )
     event.result = {"payload": {"ok": True}}
 
     uow.events.save.return_value = Ok(event)
@@ -284,10 +308,16 @@ async def test_persist_outcome_exhausted_no_transition_from_processing() -> None
     uow.commit = AsyncMock()
 
     usecase = ProcessEventIdealUseCase(uow=uow)
-    event = Event(id=uuid4(), name="evt", state=EventState.TEMPORAL_ERROR, payload={}, context={})
+    event = Event(
+        id=uuid4(), name="evt", state=EventState.TEMPORAL_ERROR, payload={}, context={}
+    )
     # Simular que el evento fue de PROCESSING → TEMPORAL_ERROR (no RETRYING)
     event.transitions = [
-        EventTransition(event_id=event.id, from_state=EventState.PROCESSING, to_state=EventState.TEMPORAL_ERROR)
+        EventTransition(
+            event_id=event.id,
+            from_state=EventState.PROCESSING,
+            to_state=EventState.TEMPORAL_ERROR,
+        )
     ]
     event.context = {"processing": {"retry_exhausted": True, "attempts": [{}]}}
 
