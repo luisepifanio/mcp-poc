@@ -30,6 +30,7 @@ from app.core.processors import (
     ProcessorResultStatus,
     RetryConfig,
 )
+from app.errors import ErrorCatalog
 
 logger = logging.getLogger(__name__)
 
@@ -94,15 +95,15 @@ class ApiCallProcessor(IEventProcessor, BaseProcessorErrorClassifier):
         # Validate required fields
         method_str = payload.get("method", "GET")
         if not isinstance(method_str, str):
-            raise ValueError("API call requires 'method' to be a string in payload")
+            raise ValueError(f"{ErrorCatalog.INVALID_HTTP_METHOD.value}: 'method' must be a string")
         method = method_str.upper()
 
         url = payload.get("url")
         if not isinstance(url, str):
-            raise ValueError("API call requires 'url' to be a string in payload")
+            raise ValueError(f"{ErrorCatalog.INVALID_HTTP_URL.value}: 'url' must be a string")
 
         if method not in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"):
-            raise ValueError(f"Invalid HTTP method: {method}")
+            raise ValueError(f"{ErrorCatalog.INVALID_HTTP_METHOD.value}: {method}")
 
         # Extract parameters
         headers_raw = payload.get("headers", {})
@@ -299,8 +300,10 @@ class GrpcProcessor(IEventProcessor, BaseProcessorErrorClassifier):
         method = payload.get("method")
         address = payload.get("address", "localhost:50051")
 
-        if not service or not method:
-            raise ValueError("gRPC call requires 'service' and 'method' in payload")
+        if not service:
+            raise ValueError(f"{ErrorCatalog.INVALID_GRPC_SERVICE.value}: 'service' is required in payload")
+        if not method:
+            raise ValueError(f"{ErrorCatalog.INVALID_GRPC_METHOD.value}: 'method' is required in payload")
 
         timeout_value = payload.get("timeout", self.timeout)
         if not isinstance(timeout_value, (int, float)):
@@ -435,7 +438,7 @@ class LocalUseCaseProcessor(IEventProcessor, BaseProcessorErrorClassifier):
         use_case_input = raw_input if isinstance(raw_input, dict) else {}
 
         if not use_case_name:
-            raise ValueError("Local use case requires 'use_case_name' in payload")
+            raise ValueError(f"{ErrorCatalog.MISSING_USECASE_NAME.value}: 'use_case_name' is required in payload")
 
         self.logger.info(
             f"Local use case: {use_case_name}",

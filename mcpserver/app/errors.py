@@ -6,12 +6,27 @@ from .core.entities import JSONDict
 
 
 class ErrorCatalog(str, enum.Enum):
+    # Core errors
     GENERIC_FAIL = "GENERIC_FAIL"
     VALIDATION_FAILED = "VALIDATION_FAILED"
     NOT_FOUND = "NOT_FOUND"
     RUNTIME_FAILED = "RUNTIME_FAILED"
     USE_CASE_EXECUTION_FAILED = "USE_CASE_EXECUTION_FAILED"
     UNIMPLENTED = "UNIMPLENTED"
+    
+    # Processor-specific validation errors (HTTP/REST)
+    INVALID_HTTP_METHOD = "INVALID_HTTP_METHOD"
+    INVALID_HTTP_URL = "INVALID_HTTP_URL"
+    MISSING_HTTP_HEADERS = "MISSING_HTTP_HEADERS"
+    
+    # Processor-specific validation errors (gRPC)
+    INVALID_GRPC_SERVICE = "INVALID_GRPC_SERVICE"
+    INVALID_GRPC_METHOD = "INVALID_GRPC_METHOD"
+    MISSING_GRPC_ADDRESS = "MISSING_GRPC_ADDRESS"
+    
+    # Processor-specific validation errors (Local Use Cases)
+    MISSING_USECASE_NAME = "MISSING_USECASE_NAME"
+    INVALID_USECASE_INPUT = "INVALID_USECASE_INPUT"
 
 
 class ErrorDetail(BaseModel):

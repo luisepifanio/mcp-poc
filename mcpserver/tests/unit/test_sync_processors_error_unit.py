@@ -175,7 +175,7 @@ async def test_api_processor_invalid_method_validation():
     )
 
     # Should fail validation without making HTTP request
-    with pytest.raises(ValueError, match="Invalid HTTP method"):
+    with pytest.raises(ValueError, match="INVALID_HTTP_METHOD"):
         await processor.process(event)
 
 

@@ -93,7 +93,7 @@ async def test_api_processor_missing_url(api_processor: ApiCallProcessor) -> Non
         },
     )
 
-    with pytest.raises(ValueError, match="requires 'url'"):
+    with pytest.raises(ValueError, match="INVALID_HTTP_URL"):
         await api_processor.process(event)
 
 
@@ -110,7 +110,7 @@ async def test_api_processor_invalid_method(api_processor: ApiCallProcessor) -> 
         },
     )
 
-    with pytest.raises(ValueError, match="Invalid HTTP method"):
+    with pytest.raises(ValueError, match="INVALID_HTTP_METHOD"):
         await api_processor.process(event)
 
 
@@ -285,7 +285,7 @@ async def test_grpc_processor_missing_service(grpc_processor: GrpcProcessor) -> 
         payload={"method": "ProcessData"},
     )
 
-    with pytest.raises(ValueError, match="requires 'service'"):
+    with pytest.raises(ValueError, match="INVALID_GRPC_SERVICE"):
         await grpc_processor.process(event)
 
 
@@ -299,7 +299,7 @@ async def test_grpc_processor_missing_method(grpc_processor: GrpcProcessor) -> N
         payload={"service": "example.Service"},
     )
 
-    with pytest.raises(ValueError, match="requires 'service' and 'method'"):
+    with pytest.raises(ValueError, match="INVALID_GRPC_METHOD"):
         await grpc_processor.process(event)
 
 
@@ -368,7 +368,7 @@ async def test_local_usecase_processor_missing_name(
         payload={"input": {"data": "test"}},
     )
 
-    with pytest.raises(ValueError, match="requires 'use_case_name'"):
+    with pytest.raises(ValueError, match="MISSING_USECASE_NAME"):
         await local_usecase_processor.process(event)
 
 

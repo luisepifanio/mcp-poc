@@ -3,7 +3,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.core.processor_factory import (
+    get_api_call_retry_config,
+    get_grpc_retry_config,
+    get_local_usecase_retry_config,
+)
 from app.core.processors import RetryConfig
+from app.infrastructure.processors.sync_processors import (
+    ApiCallProcessor,
+    GrpcProcessor,
+    LocalUseCaseProcessor,
+)
 
 # Fast retry config for tests (56x faster than production defaults)
 # Timeline: Attempt 1 (0ms) → Attempt 2 (10ms) → Attempt 3 (20ms) = ~30ms total
@@ -75,3 +85,86 @@ def uow_mock() -> MagicMock:
     mock.__aexit__ = AsyncMock(return_value=None)
 
     return mock
+
+
+# ==================== PROCESSOR FIXTURES ====================
+# Fast and production-speed processors for testing
+
+
+@pytest.fixture
+def api_processor_fast() -> ApiCallProcessor:
+    """
+    Fast API processor for quick unit tests.
+    
+    Uses test retry config with <100ms latency.
+    """
+    return ApiCallProcessor(
+        timeout=30.0,
+        retry_config=get_api_call_retry_config(fast=True),
+    )
+
+
+@pytest.fixture
+def api_processor_slow() -> ApiCallProcessor:
+    """
+    Production-speed API processor for realistic testing.
+    
+    Uses production retry config with 500ms-2s exponential backoff.
+    """
+    return ApiCallProcessor(
+        timeout=30.0,
+        retry_config=get_api_call_retry_config(fast=False),
+    )
+
+
+@pytest.fixture
+def grpc_processor_fast() -> GrpcProcessor:
+    """
+    Fast gRPC processor for quick unit tests.
+    
+    Uses test retry config with <100ms latency.
+    """
+    return GrpcProcessor(
+        timeout=30.0,
+        retry_config=get_grpc_retry_config(fast=True),
+    )
+
+
+@pytest.fixture
+def grpc_processor_slow() -> GrpcProcessor:
+    """
+    Production-speed gRPC processor for realistic testing.
+    
+    Uses production retry config with 300ms-2s exponential backoff.
+    """
+    return GrpcProcessor(
+        timeout=30.0,
+        retry_config=get_grpc_retry_config(fast=False),
+    )
+
+
+@pytest.fixture
+def local_processor_fast() -> LocalUseCaseProcessor:
+    """
+    Fast local use case processor for quick unit tests.
+    
+    Uses test retry config with <100ms latency.
+    """
+    return LocalUseCaseProcessor(
+        uow=None,  # Not needed for processor construction
+        retry_config=get_local_usecase_retry_config(fast=True),
+    )
+
+
+@pytest.fixture
+def local_processor_slow() -> LocalUseCaseProcessor:
+    """
+    Production-speed local use case processor for realistic testing.
+    
+    Uses production retry config with 50ms-1s exponential backoff.
+    """
+    return LocalUseCaseProcessor(
+        uow=None,  # Not needed for processor construction
+        retry_config=get_local_usecase_retry_config(fast=False),
+    )
+
